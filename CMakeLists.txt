@@ -18,6 +18,12 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 # -----------------------------------------------------------------------------
+# Examples
+add_executable(packet_demo examples/PacketProcessingDemo.cpp)
+target_include_directories(packet_demo PRIVATE include)
+
+# Optional: Add Benchmark target if library is found
+# -----------------------------------------------------------------------------
 # Google Benchmark Integration
 # -----------------------------------------------------------------------------
 FetchContent_Declare(

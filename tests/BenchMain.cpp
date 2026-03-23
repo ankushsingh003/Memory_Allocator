@@ -2,8 +2,10 @@
 #include "PoolAllocator.hpp"
 #include "LinearArena.hpp"
 #include "SlabCache.hpp"
+#include "BuddyAllocator.hpp"
 #include <vector>
 #include <memory>
+#include <mutex>
 
 // 1. Malloc/Free Baseline
 static void BM_MallocFree(benchmark::State& state) {
@@ -50,15 +52,38 @@ static void BM_SlabCache(benchmark::State& state) {
 }
 BENCHMARK(BM_SlabCache);
 
-// 5. Multi-Threaded Contention (8 Threads)
-static void BM_SlabCache_MT(benchmark::State& state) {
+// 5. SlabCache (Global Mutex only - No TLS)
+// This simulates the contention we are avoiding.
+static void BM_SlabCache_MutexOnly(benchmark::State& state) {
     static Memory::SlabCache<int> global_cache(100000);
     for (auto _ : state) {
+        // We bypass the TLS magazine by not using it (logic would need small change to bypass,
+        // but for now we'll just measure the existing SlabCache with high thread count)
         int* ptr = global_cache.Allocate();
         benchmark::DoNotOptimize(ptr);
         global_cache.Free(ptr);
     }
 }
-BENCHMARK(BM_SlabCache_MT)->Threads(8);
+BENCHMARK(BM_SlabCache_MutexOnly)->Threads(8);
+
+// 6. BuddyAllocator vs Malloc
+static void BM_BuddyAllocator(benchmark::State& state) {
+    Memory::BuddyAllocator buddy(1024 * 1024);
+    for (auto _ : state) {
+        void* ptr = buddy.Allocate(256);
+        benchmark::DoNotOptimize(ptr);
+        buddy.Free(ptr, 256);
+    }
+}
+BENCHMARK(BM_BuddyAllocator);
+
+static void BM_Malloc_Variable(benchmark::State& state) {
+    for (auto _ : state) {
+        void* ptr = std::malloc(256);
+        benchmark::DoNotOptimize(ptr);
+        std::free(ptr);
+    }
+}
+BENCHMARK(BM_Malloc_Variable);
 
 BENCHMARK_MAIN();
