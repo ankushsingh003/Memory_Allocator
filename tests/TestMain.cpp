@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "MemoryUtils.hpp"
+#include "VirtualMemory.hpp"
 
 TEST(MemoryUtilsTest, AlignmentTest) {
     size_t size = 15;
@@ -7,9 +8,12 @@ TEST(MemoryUtilsTest, AlignmentTest) {
     EXPECT_EQ(Memory::AlignUp(size, alignment), 16);
 }
 
-TEST(MemoryUtilsTest, VirtualAllocTest) {
-    size_t size = 4096; // 4KB page
-    void* ptr = Memory::AllocateVirtualMemory(size);
-    ASSERT_NE(ptr, nullptr);
-    Memory::FreeVirtualMemory(ptr, size);
+TEST(VirtualMemoryTest, RAII_AllocationTest) {
+    size_t size = 4096;
+    {
+        Memory::VirtualMemory vm(size);
+        ASSERT_NE(vm.GetPtr(), nullptr);
+        EXPECT_GE(vm.GetSize(), size);
+        // Memory is automatically freed when 'vm' goes out of scope
+    }
 }
