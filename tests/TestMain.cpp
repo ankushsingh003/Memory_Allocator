@@ -10,6 +10,7 @@
 #include "StackArena.hpp"
 #include "SlabCache.hpp"
 #include "LockFreeFreelist.hpp"
+#include "BuddyAllocator.hpp"
 
 // -----------------------------------------------------------------------------
 // PoolAllocator Tests
@@ -208,6 +209,8 @@ TEST(SlabCacheTest, MultiThreadedAllocation) {
                 cache.Free(p);
             }
         });
+    for (auto& t : threads) {
+        t.join();
     }
 
     EXPECT_EQ(successCount, numThreads * allocsPerThread);
@@ -264,4 +267,30 @@ TEST(LockFreeFreelistTest, ContentionTest) {
     
     EXPECT_EQ(successPop, numThreads * opsPerThread);
     for (int* p : nodes) delete p;
+}
+
+// -----------------------------------------------------------------------------
+// BuddyAllocator Tests
+// -----------------------------------------------------------------------------
+
+TEST(BuddyAllocatorTest, SimpleSplitAndCoalesce) {
+    // 1024 total, 64 min block. Orders: 0(64), 1(128), 2(256), 3(512), 4(1024)
+    Memory::BuddyAllocator buddy(1024, 64);
+    
+    // Allocate 200 bytes -> should go to Order 2 (256 bytes)
+    void* p1 = buddy.Allocate(200);
+    ASSERT_NE(p1, nullptr);
+    
+    // Allocate another 200 -> should take the other half of the 512 block
+    void* p2 = buddy.Allocate(200);
+    ASSERT_NE(p2, nullptr);
+    
+    buddy.Free(p1, 200);
+    buddy.Free(p2, 200);
+    
+    // After freeing both, they should coalesce back to 1024.
+    // We can verify this by trying to allocate the full 1024 again.
+    void* p3 = buddy.Allocate(1024);
+    EXPECT_NE(p3, nullptr);
+    buddy.Free(p3, 1024);
 }
