@@ -1,15 +1,15 @@
 #pragma once
+#include "TaggedPointer.hpp"
 #include <atomic>
 #include <cstdint>
 
 namespace Memory {
 
     /**
-     * @brief A Lock-Free Multi-Producer Multi-Consumer (MPMC) Freelist.
+     * @brief An ABA-Safe Multi-Producer Multi-Consumer (MPMC) Freelist.
      * 
-     * Uses atomic Compare-And-Swap (CAS) to manage the list head without mutexes.
-     * Note: This basic version is susceptible to the ABA problem. 
-     * Tagged pointers will be added in the next milestone.
+     * Uses 128-bit atomic Tagged Pointers to detect if a node was recycled 
+     * during a pop operation, preventing the ABA problem.
      */
     template <typename T>
     class LockFreeFreelist {
@@ -18,41 +18,53 @@ namespace Memory {
             std::atomic<Node*> next;
         };
 
-        LockFreeFreelist() : head_(nullptr) {}
+        LockFreeFreelist() : head_({nullptr, 0}) {}
 
         /**
-         * @brief Pushe a pointer back onto the list. (Lock-free)
+         * @brief Pushes a pointer back onto the list. (Lock-free + ABA safe)
          */
         void Push(void* ptr) {
             Node* node = reinterpret_cast<Node*>(ptr);
-            Node* oldHead = head_.load(std::memory_order_relaxed);
+            TaggedPointer<Node> oldHead = head_.load(std::memory_order_relaxed);
             
             do {
-                node->next.store(oldHead, std::memory_order_relaxed);
-            } while (!head_.compare_exchange_weak(oldHead, node, 
-                                                std::memory_order_release, 
-                                                std::memory_order_relaxed));
+                node->next.store(oldHead.ptr, std::memory_order_relaxed);
+                
+                TaggedPointer<Node> newHead = {node, oldHead.tag + 1};
+                if (head_.compare_exchange_weak(oldHead, newHead, 
+                                               std::memory_order_release, 
+                                               std::memory_order_relaxed)) {
+                    break;
+                }
+            } while (true);
         }
 
         /**
-         * @brief Pops a pointer from the list. (Lock-free)
+         * @brief Pops a pointer from the list. (Lock-free + ABA safe)
          * @return Pointer or nullptr if empty.
          */
         void* Pop() {
-            Node* oldHead = head_.load(std::memory_order_acquire);
+            TaggedPointer<Node> oldHead = head_.load(std::memory_order_acquire);
             
-            while (oldHead && !head_.compare_exchange_weak(oldHead, 
-                                                         oldHead->next.load(std::memory_order_relaxed),
-                                                         std::memory_order_acquire,
-                                                         std::memory_order_relaxed)) {
-                // CAS failed, oldHead is updated with the new current head, try again.
+            while (oldHead.ptr) {
+                Node* nextNode = oldHead.ptr->next.load(std::memory_order_relaxed);
+                TaggedPointer<Node> newHead = {nextNode, oldHead.tag + 1};
+                
+                if (head_.compare_exchange_weak(oldHead, newHead,
+                                               std::memory_order_acquire,
+                                               std::memory_order_relaxed)) {
+                    return oldHead.ptr;
+                }
+                // oldHead is refreshed by compare_exchange_weak on failure.
             }
             
-            return oldHead;
+            return nullptr;
         }
 
     private:
-        std::atomic<Node*> head_;
+        // Use std::atomic on the TaggedPointer struct.
+        // On modern 64-bit systems, this will use CMPXCHG16B.
+        alignas(16) std::atomic<TaggedPointer<Node>> head_;
     };
 
 } // namespace Memory
