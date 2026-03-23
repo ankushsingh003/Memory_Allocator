@@ -50,4 +50,15 @@ static void BM_SlabCache(benchmark::State& state) {
 }
 BENCHMARK(BM_SlabCache);
 
+// 5. Multi-Threaded Contention (8 Threads)
+static void BM_SlabCache_MT(benchmark::State& state) {
+    static Memory::SlabCache<int> global_cache(100000);
+    for (auto _ : state) {
+        int* ptr = global_cache.Allocate();
+        benchmark::DoNotOptimize(ptr);
+        global_cache.Free(ptr);
+    }
+}
+BENCHMARK(BM_SlabCache_MT)->Threads(8);
+
 BENCHMARK_MAIN();
