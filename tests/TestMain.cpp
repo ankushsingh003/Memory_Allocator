@@ -11,6 +11,7 @@
 #include "SlabCache.hpp"
 #include "LockFreeFreelist.hpp"
 #include "BuddyAllocator.hpp"
+#include "MemoryAllocator.hpp"
 
 // -----------------------------------------------------------------------------
 // PoolAllocator Tests
@@ -293,4 +294,18 @@ TEST(BuddyAllocatorTest, SimpleSplitAndCoalesce) {
     void* p3 = buddy.Allocate(1024);
     EXPECT_NE(p3, nullptr);
     buddy.Free(p3, 1024);
+}
+
+TEST(MemoryAllocatorTest, StdVectorIntegration) {
+    // Use std::vector with our custom Buddy-backed allocator!
+    std::vector<int, Memory::Allocator<int>> vec;
+    
+    for (int i = 0; i < 100; ++i) {
+        vec.push_back(i);
+    }
+    
+    EXPECT_EQ(vec.size(), 100);
+    EXPECT_EQ(vec[42], 42);
+    
+    // Vector will automatically call deallocate() on our BuddyAllocator when it goes out of scope.
 }
