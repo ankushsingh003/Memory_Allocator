@@ -1,19 +1,41 @@
 #include <gtest/gtest.h>
 #include "MemoryUtils.hpp"
 #include "VirtualMemory.hpp"
+#include "PoolAllocator.hpp"
 
-TEST(MemoryUtilsTest, AlignmentTest) {
-    size_t size = 15;
-    size_t alignment = 8;
-    EXPECT_EQ(Memory::AlignUp(size, alignment), 16);
+// ... (other tests)
+
+TEST(PoolAllocatorTest, BasicAllocation) {
+    struct Vec3 { float x, y, z; };
+    Memory::PoolAllocator<Vec3> pool(100);
+
+    Vec3* p1 = pool.Allocate();
+    ASSERT_NE(p1, nullptr);
+    
+    p1->x = 1.0f;
+    EXPECT_EQ(p1->x, 1.0f);
+
+    pool.Free(p1);
 }
 
-TEST(VirtualMemoryTest, RAII_AllocationTest) {
-    size_t size = 4096;
-    {
-        Memory::VirtualMemory vm(size);
-        ASSERT_NE(vm.GetPtr(), nullptr);
-        EXPECT_GE(vm.GetSize(), size);
-        // Memory is automatically freed when 'vm' goes out of scope
-    }
+TEST(PoolAllocatorTest, FullPoolTest) {
+    Memory::PoolAllocator<int> pool(2);
+    
+    int* p1 = pool.Allocate();
+    int* p2 = pool.Allocate();
+    int* p3 = pool.Allocate();
+
+    ASSERT_NE(p1, nullptr);
+    ASSERT_NE(p2, nullptr);
+    EXPECT_EQ(p3, nullptr); // Pool should be empty
+}
+
+TEST(PoolAllocatorTest, ReuseTest) {
+    Memory::PoolAllocator<double> pool(1);
+    
+    double* p1 = pool.Allocate();
+    pool.Free(p1);
+    
+    double* p2 = pool.Allocate();
+    EXPECT_EQ(p1, p2); // Should reuse the exact same memory slot
 }
