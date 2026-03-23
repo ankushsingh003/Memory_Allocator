@@ -82,6 +82,29 @@ TEST(PoolAllocatorTest, StressTest) {
 }
 
 // -----------------------------------------------------------------------------
+// StackArena Tests
+// -----------------------------------------------------------------------------
+
+TEST(StackArenaTest, FastStackAllocation) {
+    // 1024 bytes on the STACK
+    Memory::StackArena<1024> stack;
+    
+    void* p1 = stack.Allocate(100);
+    ASSERT_NE(p1, nullptr);
+    EXPECT_EQ(stack.GetUsedMemory(), 100);
+    
+    stack.Reset();
+    EXPECT_EQ(stack.GetUsedMemory(), 0);
+}
+
+TEST(StackArenaTest, StackOOM) {
+    Memory::StackArena<16> tinyStack;
+    
+    ASSERT_NE(tinyStack.Allocate(16), nullptr);
+    EXPECT_EQ(tinyStack.Allocate(1), nullptr); // Should fail immediately
+}
+
+// -----------------------------------------------------------------------------
 // LinearArena Tests
 // -----------------------------------------------------------------------------
 
