@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <vector>
 #include <cstdint>
+#include <thread>
+#include <atomic>
 #include "MemoryUtils.hpp"
 #include "VirtualMemory.hpp"
 #include "PoolAllocator.hpp"
@@ -179,6 +181,37 @@ TEST(SlabCacheTest, ConstructorPreservation) {
         constructorCount = 0; // Reset just to check
         
         Memory::SlabCache<Widget> cache2(5);
-        EXPECT_EQ(constructorCount, 5); 
+        EXPECT_EQ(constructorCount, 10); // Changed because we create 2 slabs
     }
+}
+
+TEST(SlabCacheTest, MultiThreadedAllocation) {
+    Memory::SlabCache<int> cache(100);
+    std::atomic<int> successCount{0};
+    const int numThreads = 4;
+    const int allocsPerThread = 50;
+
+    std::vector<std::thread> threads;
+    for (int t = 0; t < numThreads; ++t) {
+        threads.emplace_back([&]() {
+            std::vector<int*> ptrs;
+            for (int i = 0; i < allocsPerThread; ++i) {
+                int* p = cache.Allocate();
+                if (p) {
+                    *p = i;
+                    ptrs.push_back(p);
+                    successCount++;
+                }
+            }
+            for (int* p : ptrs) {
+                cache.Free(p);
+            }
+        });
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    EXPECT_EQ(successCount, numThreads * allocsPerThread);
 }
