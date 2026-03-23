@@ -54,3 +54,39 @@ TEST(PoolAllocatorTest, AlignmentTest) {
     // Distance between them should be at least 64 bytes
     EXPECT_GE(reinterpret_cast<uint8_t*>(p2) - reinterpret_cast<uint8_t*>(p1), 64);
 }
+
+TEST(PoolAllocatorTest, StressTest) {
+    const size_t count = 1000;
+    Memory::PoolAllocator<size_t> pool(count);
+    std::vector<size_t*> ptrs;
+
+    // 1. Fill the pool
+    for (size_t i = 0; i < count; ++i) {
+        size_t* p = pool.Allocate();
+        ASSERT_NE(p, nullptr);
+        *p = i;
+        ptrs.push_back(p);
+    }
+
+    // 2. Verify everything is correct
+    for (size_t i = 0; i < count; ++i) {
+        EXPECT_EQ(*ptrs[i], i);
+    }
+
+    // 3. Free in reverse order
+    for (int i = count - 1; i >= 0; --i) {
+        pool.Free(ptrs[i]);
+    }
+
+    // 4. Allocation should still work perfectly after total drain
+    size_t* last = pool.Allocate();
+    ASSERT_NE(last, nullptr);
+    pool.Free(last);
+}
+
+TEST(PoolAllocatorTest, OOM_EdgeCase) {
+    Memory::PoolAllocator<int> pool(1);
+    
+    ASSERT_NE(pool.Allocate(), nullptr);
+    EXPECT_EQ(pool.Allocate(), nullptr); // Should return nullptr immediately
+}
