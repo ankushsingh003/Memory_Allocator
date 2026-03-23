@@ -37,7 +37,7 @@ namespace Memory {
         }
 
         void deallocate(T* p, std::size_t n) noexcept {
-            GetGlobalBuddy().Free(p, n * sizeof(T));
+            GetGlobalBuddy().Free(const_cast<void*>(static_cast<const void*>(p)), n * sizeof(T));
         }
 
         template <typename U>
