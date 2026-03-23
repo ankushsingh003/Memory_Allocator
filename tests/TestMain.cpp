@@ -9,6 +9,7 @@
 #include "LinearArena.hpp"
 #include "StackArena.hpp"
 #include "SlabCache.hpp"
+#include "LockFreeFreelist.hpp"
 
 // -----------------------------------------------------------------------------
 // PoolAllocator Tests
@@ -209,9 +210,58 @@ TEST(SlabCacheTest, MultiThreadedAllocation) {
         });
     }
 
-    for (auto& t : threads) {
-        t.join();
+    EXPECT_EQ(successCount, numThreads * allocsPerThread);
+}
+
+// -----------------------------------------------------------------------------
+// LockFreeFreelist Tests (MPMC Stress)
+// -----------------------------------------------------------------------------
+
+TEST(LockFreeFreelistTest, BasicPushPop) {
+    Memory::LockFreeFreelist<int> list;
+    int data = 42;
+    list.Push(&data);
+    
+    void* p = list.Pop();
+    EXPECT_EQ(p, &data);
+    EXPECT_EQ(list.Pop(), nullptr);
+}
+
+TEST(LockFreeFreelistTest, ContentionTest) {
+    Memory::LockFreeFreelist<int> list;
+    const int numThreads = 4;
+    const int opsPerThread = 1000;
+    
+    // Pre-allocate some nodes (can't use local ints as we pop them)
+    std::vector<int*> nodes(numThreads * opsPerThread);
+    for (int i = 0; i < nodes.size(); ++i) nodes[i] = new int(i);
+
+    std::vector<std::thread> threads;
+    std::atomic<int> successPop{0};
+
+    // Producers
+    for (int t = 0; t < numThreads; ++t) {
+        threads.emplace_back([&, t]() {
+            for (int i = 0; i < opsPerThread; ++i) {
+                list.Push(nodes[t * opsPerThread + i]);
+            }
+        });
     }
 
-    EXPECT_EQ(successCount, numThreads * allocsPerThread);
+    for (auto& t : threads) t.join();
+    threads.clear();
+
+    // Consumers
+    for (int t = 0; t < numThreads; ++t) {
+        threads.emplace_back([&]() {
+            for (int i = 0; i < opsPerThread; ++i) {
+                if (list.Pop()) successPop++;
+            }
+        });
+    }
+
+    for (auto& t : threads) t.join();
+    
+    EXPECT_EQ(successPop, numThreads * opsPerThread);
+    for (int* p : nodes) delete p;
 }
