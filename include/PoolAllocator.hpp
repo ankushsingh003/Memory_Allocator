@@ -12,7 +12,13 @@ namespace Memory {
      * Pre-allocates a fixed number of slots. All allocations and deallocations are O(1).
      * Ideal for many small, same-sized objects (e.g., entity components, network packets).
      */
-    template <typename T>
+    /**
+     * @brief A high-performance Pool Allocator for objects of type T.
+     * 
+     * @tparam T The type of object to allocate.
+     * @tparam Alignment The alignment requirement in bytes (must be power of 2).
+     */
+    template <typename T, size_t Alignment = alignof(T)>
     class PoolAllocator {
     public:
         /**
@@ -21,14 +27,15 @@ namespace Memory {
          */
         explicit PoolAllocator(size_t numSlots) 
             : numSlots_(numSlots), 
-              storage_(numSlots * sizeof(Node)) 
+              storage_(numSlots * SlotSize) 
         {
             // Initialize the freelist by linking all nodes together
             Node* current = static_cast<Node*>(storage_.GetPtr());
             freeList_ = current;
 
             for (size_t i = 0; i < numSlots_ - 1; ++i) {
-                current->next = reinterpret_cast<Node*>(reinterpret_cast<uint8_t*>(current) + sizeof(Node));
+                // Advance exactly one 'SlotSize' in memory
+                current->next = reinterpret_cast<Node*>(reinterpret_cast<uint8_t*>(current) + SlotSize);
                 current = current->next;
             }
             current->next = nullptr; // End of the list
@@ -40,14 +47,12 @@ namespace Memory {
          */
         T* Allocate() {
             if (!freeList_) {
-                return nullptr; // Pool is out of memory
+                return nullptr;
             }
 
-            // Pop the first node from the freelist
             Node* node = freeList_;
             freeList_ = freeList_->next;
 
-            // Return the memory cast to type T
             return reinterpret_cast<T*>(node);
         }
 
@@ -58,7 +63,6 @@ namespace Memory {
         void Free(void* ptr) {
             if (!ptr) return;
 
-            // Push the pointer back onto the front of the freelist (LIFO)
             Node* node = reinterpret_cast<Node*>(ptr);
             node->next = freeList_;
             freeList_ = node;
@@ -67,21 +71,16 @@ namespace Memory {
         [[nodiscard]] size_t GetCapacity() const { return numSlots_; }
 
     private:
-        /**
-         * @brief A node in our freelist. 
-         * 
-         * We use a 'union-like' trick: when the memory is free, it stores a pointer 
-         * to the next free node. When it's allocated, it stores the actual object T.
-         */
         struct Node {
             Node* next;
         };
 
-        // Ensure each slot is large enough to hold either a T or our 'next' pointer
-        static_assert(sizeof(T) >= sizeof(Node*), "Type T must be at least pointer-sized for the freelist trick.");
+        // Important: each slot must be large enough for T AND large enough for a Node*
+        // AND it must be a multiple of the requested Alignment.
+        static constexpr size_t SlotSize = AlignUp(sizeof(T) > sizeof(Node*) ? sizeof(T) : sizeof(Node*), Alignment);
 
         size_t numSlots_;
-        VirtualMemory storage_; // RAII OS memory
+        VirtualMemory storage_;
         Node* freeList_ = nullptr;
     };
 
