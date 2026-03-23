@@ -55,20 +55,28 @@ namespace Memory {
     template <typename T>
     class SlabCache {
     public:
-        explicit SlabCache(size_t objectsPerSlab = 64) 
-            : objectsPerSlab_(objectsPerSlab) {
+        explicit SlabCache(size_t objectsPerSlab = 64, size_t magazineSize = 16) 
+            : objectsPerSlab_(objectsPerSlab), 
+              magazineSize_(magazineSize) {
             slotSize_ = AlignUp(sizeof(T) > sizeof(typename Slab<T>::Node*) ? sizeof(T) : sizeof(typename Slab<T>::Node*), alignof(T));
         }
 
         T* Allocate() {
-            // Check slabs with free space
+            // 1. Check Magazine (Fastest Path)
+            if (!magazine_.empty()) {
+                T* ptr = magazine_.back();
+                magazine_.pop_back();
+                return ptr;
+            }
+
+            // 2. Check slabs with free space
             for (auto& slab : slabs_) {
                 if (slab.freeSlots > 0) {
                     return AllocateFromSlab(slab);
                 }
             }
 
-            // Create new slab
+            // 3. Create new slab
             slabs_.emplace_back(objectsPerSlab_, slotSize_);
             return AllocateFromSlab(slabs_.back());
         }
@@ -76,6 +84,13 @@ namespace Memory {
         void Free(T* ptr) {
             if (!ptr) return;
 
+            // 1. Try to push to Magazine (Fast Path)
+            if (magazine_.size() < magazineSize_) {
+                magazine_.push_back(ptr);
+                return;
+            }
+
+            // 2. Return to Slab (Slow Path)
             for (auto& slab : slabs_) {
                 if (slab.Contains(ptr)) {
                     typename Slab<T>::Node* node = reinterpret_cast<typename Slab<T>::Node*>(ptr);
@@ -96,8 +111,10 @@ namespace Memory {
         }
 
         size_t objectsPerSlab_;
+        size_t magazineSize_;
         size_t slotSize_;
         std::vector<Slab<T>> slabs_;
+        std::vector<T*> magazine_;
     };
 
 } // namespace Memory
