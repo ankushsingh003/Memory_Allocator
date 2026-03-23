@@ -1,0 +1,22 @@
+# Build directories
+/build/
+/out/
+/.vs/
+/.vscode/
+
+# Binaries and libraries
+*.exe
+*.dll
+*.so
+*.a
+*.lib
+*.pdb
+
+# Dependency directories
+/external/
+/googletest/
+/benchmark/
+
+# OS specific
+.DS_Store
+Thumbs.db
