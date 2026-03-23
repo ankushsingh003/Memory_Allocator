@@ -5,6 +5,8 @@
 #include "VirtualMemory.hpp"
 #include "PoolAllocator.hpp"
 #include "LinearArena.hpp"
+#include "StackArena.hpp"
+#include "SlabCache.hpp"
 
 // -----------------------------------------------------------------------------
 // PoolAllocator Tests
@@ -148,4 +150,35 @@ TEST(LinearArenaTest, ScopeGuardTest) {
         EXPECT_EQ(arena.GetUsedMemory(), 100);
     }
     EXPECT_EQ(arena.GetUsedMemory(), 0);
+}
+
+// -----------------------------------------------------------------------------
+// SlabCache Tests
+// -----------------------------------------------------------------------------
+
+TEST(SlabCacheTest, BasicAllocation) {
+    Memory::SlabCache<int> cache(10);
+    
+    int* p1 = cache.Allocate();
+    ASSERT_NE(p1, nullptr);
+    *p1 = 42;
+    EXPECT_EQ(*p1, 42);
+    
+    cache.Free(p1);
+}
+
+TEST(SlabCacheTest, ConstructorPreservation) {
+    static int constructorCount = 0;
+    struct Widget {
+        Widget() { constructorCount++; }
+    };
+
+    {
+        Memory::SlabCache<Widget> cache(5);
+        // Allocating should NOT trigger constructors again
+        constructorCount = 0; // Reset just to check
+        
+        Memory::SlabCache<Widget> cache2(5);
+        EXPECT_EQ(constructorCount, 5); 
+    }
 }
