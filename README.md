@@ -82,5 +82,51 @@ cmake --build .
 
 ---
 
+## 🖥️ OS Process & Memory Simulator (new)
+
+On top of the allocator core, this project includes a small but real
+**process scheduler** that ties process lifecycle directly to the
+`BuddyAllocator`, and a browser-based **visualizer** to watch it run.
+
+This isn't a scripted animation — the C++ program actually schedules
+processes, blocks them on I/O, and calls into the real allocator to grant
+and free memory. The visualizer just replays the resulting event trace.
+
+**What it demonstrates:**
+- Process lifecycle: `NEW → READY → RUNNING → WAITING (I/O) → TERMINATED`
+- Round-robin CPU scheduling with quantum-based preemption
+- **Memory-constrained admission**: a process only becomes `READY` once the
+  allocator can actually grant its memory request — if the arena is full,
+  it stays pending, which is a simplified but real model of memory pressure
+- CPU bursts, I/O bursts, and I/O acknowledgement
+- Real allocator activity: contiguous byte-addressed allocation, buddy
+  splitting/coalescing, and freeing on process termination
+
+### Build & run the simulation
+```bash
+g++ -std=c++20 -Iinclude examples/OSSimDemo.cpp -o os_sim_demo
+./os_sim_demo
+```
+This writes `events.json` — a full trace of every process/memory event,
+tick by tick. (It's also wired into `CMakeLists.txt` as the `os_sim_demo`
+target if you're building the whole project via CMake.)
+
+### Watch it
+Open `frontend/index.html` directly in a browser (no server needed) and
+load the `events.json` file you just generated using the file picker.
+Then use **Step** to go event-by-event, or **Play** to watch it run
+automatically:
+
+- **Memory arena strip** — the whole managed arena, drawn to scale, colored
+  by which process owns each block, with real byte offsets
+- **Process state lanes** — Ready / Running / Waiting / Terminated, with
+  processes visibly moving between them
+- **Kernel log** — every scheduling and memory event, in order
+
+A sample `frontend/events.json` is included so you can open the visualizer
+immediately without building anything first.
+
+---
+
 ## 📄 License
 Distributed under the MIT License. See `LICENSE` for more information.
