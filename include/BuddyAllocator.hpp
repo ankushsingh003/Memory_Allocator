@@ -49,6 +49,29 @@ namespace Memory {
             FreeInternal(ptr, order);
         }
 
+        // --- Introspection helpers (added for the OS/process simulator & visualizer) ---
+        // These do not change allocation behavior; they just expose read-only info
+        // needed to render "where in memory did this go" for a UI.
+
+        [[nodiscard]] void* GetBasePtr() const { return storage_.GetPtr(); }
+        [[nodiscard]] size_t GetTotalSize() const { return storage_.GetSize(); }
+        [[nodiscard]] size_t GetMinBlockSize() const { return minBlockSize_; }
+        [[nodiscard]] size_t GetMaxOrder() const { return maxOrder_; }
+
+        // Returns the actual block size that would be handed out for a request
+        // of `size` bytes (rounded up to the allocator's power-of-two granularity).
+        [[nodiscard]] size_t BlockSizeForRequest(size_t size) const {
+            size_t order = GetOrder(size);
+            return minBlockSize_ << order;
+        }
+
+        // Byte offset of `ptr` relative to the managed arena's base address.
+        // Useful for drawing a memory-address timeline instead of raw pointers.
+        [[nodiscard]] size_t OffsetOf(void* ptr) const {
+            return static_cast<size_t>(
+                static_cast<uint8_t*>(ptr) - static_cast<uint8_t*>(storage_.GetPtr()));
+        }
+
     private:
         struct Node {
             Node* next;
