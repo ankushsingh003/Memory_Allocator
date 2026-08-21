@@ -22,6 +22,11 @@ FetchContent_MakeAvailable(googletest)
 add_executable(packet_demo examples/PacketProcessingDemo.cpp)
 target_include_directories(packet_demo PRIVATE include)
 
+# OS process/scheduler simulation demo (no external deps -> builds even
+# without network access for FetchContent).
+add_executable(os_sim_demo examples/OSSimDemo.cpp)
+target_include_directories(os_sim_demo PRIVATE include)
+
 # Optional: Add Benchmark target if library is found
 # -----------------------------------------------------------------------------
 # Google Benchmark Integration
