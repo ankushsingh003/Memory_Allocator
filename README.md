@@ -84,6 +84,10 @@ cmake --build .
 
 ## 🖥️ OS Process & Memory Simulator (new)
 
+![Virtual Memory Visualization](virtual_mem.jpg)
+
+![Contiguous Memory Arena](contigous.jpg)
+
 On top of the allocator core, this project includes a small but real
 **process scheduler** that ties process lifecycle directly to the
 `BuddyAllocator`, and a browser-based **visualizer** to watch it run.
