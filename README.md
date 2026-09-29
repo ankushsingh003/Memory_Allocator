@@ -86,7 +86,7 @@ cmake --build .
 
 ![Virtual Memory Visualization](virtual_mem.jpg)
 
-![Contiguous Memory Arena](contigous.jpg)
+![Contiguous Memory Arena](contiguous.jpg)
 
 On top of the allocator core, this project includes a small but real
 **process scheduler** that ties process lifecycle directly to the
