@@ -2,36 +2,44 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>OSSIM — Process &amp; Memory Simulator</title>
+<title>MEMLAB — Virtual Memory & Process Scheduler Simulator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0a0e14;
-    --panel: #10151d;
-    --panel-raised: #151b26;
-    --line: #1f2733;
-    --text: #d8dee9;
-    --text-dim: #6b7789;
-    --text-faint: #3d4756;
-    --accent: #4fd1c5;
-    --accent-dim: #2a5f5b;
-    --free-block: #1a212c;
-    --state-ready: #d9c15a;
-    --state-running: #7fc79e;
-    --state-waiting: #e0708a;
-    --state-terminated: #3d4756;
-    --pid-1: #e6935a;
-    --pid-2: #6fb1e0;
-    --pid-3: #9b8fd9;
-    --pid-4: #7fc79e;
-    --pid-5: #e0708a;
-    --pid-6: #d9c15a;
-    --pid-7: #5ecbc5;
-    --pid-8: #c98fd4;
-    --pid-9: #e6935a;
-    --pid-10: #6fb1e0;
+    --bg: #090d14;
+    --panel: #111722;
+    --panel-raised: #182030;
+    --line: #202b3d;
+    --text: #e2e8f0;
+    --text-dim: #718096;
+    --text-faint: #4a5568;
+    --accent: #38bdf8;
+    --accent-glow: rgba(56, 189, 248, 0.15);
+    --free-block: #151d2a;
+    
+    /* Segment colors */
+    --seg-code: #3b82f6;
+    --seg-data: #10b981;
+    --seg-heap: #f59e0b;
+    --seg-stack: #a855f7;
+
+    /* Process state colors */
+    --state-ready: #eab308;
+    --state-running: #22c55e;
+    --state-waiting: #ef4444;
+    --state-terminated: #475569;
+
+    /* PID colors */
+    --pid-1: #f97316;
+    --pid-2: #06b6d4;
+    --pid-3: #8b5cf6;
+    --pid-4: #10b981;
+    --pid-5: #ec4899;
+    --pid-6: #eab308;
+    --pid-7: #14b8a6;
+    --pid-8: #a855f7;
   }
 
   * { box-sizing: border-box; }
@@ -42,154 +50,211 @@
     color: var(--text);
     font-family: 'IBM Plex Mono', monospace;
     min-height: 100vh;
-    padding: 28px 32px 60px;
+    padding: 24px 32px 60px;
   }
 
   header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 16px;
     border-bottom: 1px solid var(--line);
     padding-bottom: 16px;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
   }
 
+  .title-group {
+    display: flex;
+    flex-direction: column;
+  }
   .title {
     font-family: 'Space Mono', monospace;
     font-weight: 700;
-    font-size: 20px;
-    letter-spacing: 0.02em;
+    font-size: 22px;
+    letter-spacing: 0.03em;
+    color: var(--text);
   }
   .title span { color: var(--accent); }
-
   .subtitle {
     color: var(--text-dim);
     font-size: 12px;
     margin-top: 4px;
   }
 
-  .tick-readout {
-    font-family: 'Space Mono', monospace;
-    font-size: 13px;
-    color: var(--text-dim);
+  .metrics-bar {
+    display: flex;
+    gap: 16px;
   }
-  .tick-readout b { color: var(--accent); font-size: 16px; }
+  .metric-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 8px 16px;
+    border-radius: 6px;
+    text-align: center;
+  }
+  .metric-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .metric-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
 
   .controls {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     flex-wrap: wrap;
     margin-bottom: 24px;
+    background: var(--panel);
+    padding: 12px 18px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
   }
 
-  button, input[type=file]::file-selector-button {
+  button {
     background: var(--panel-raised);
     border: 1px solid var(--line);
     color: var(--text);
     font-family: 'IBM Plex Mono', monospace;
     font-size: 12px;
-    padding: 8px 14px;
-    border-radius: 3px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 4px;
     cursor: pointer;
-    transition: border-color 0.15s, color 0.15s;
+    transition: all 0.15s ease;
   }
-  button:hover:not(:disabled), input[type=file]::file-selector-button:hover {
+  button:hover:not(:disabled) {
     border-color: var(--accent);
     color: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+  }
+  button.primary {
+    background: var(--accent);
+    color: #090d14;
+    border-color: var(--accent);
+  }
+  button.primary:hover:not(:disabled) {
+    background: #0284c7;
+    color: #fff;
   }
   button:disabled { opacity: 0.35; cursor: not-allowed; }
-  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  button.primary { border-color: var(--accent-dim); color: var(--accent); }
-
-  input[type=range] { accent-color: var(--accent); }
-
-  .file-label {
+  .speed-ctrl {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-size: 12px;
     color: var(--text-dim);
+    margin-left: auto;
+  }
+
+  .grid-layout {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
   }
 
   section.panel {
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 18px 20px;
     margin-bottom: 20px;
   }
 
   .panel h2 {
     font-family: 'Space Mono', monospace;
-    font-size: 11px;
+    font-size: 12px;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
     color: var(--text-dim);
     margin: 0 0 14px;
-  }
-
-  /* --- Memory arena strip (the signature element) --- */
-  .arena-meta {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    color: var(--text-faint);
-    margin-bottom: 6px;
-  }
-  .arena {
-    display: flex;
-    height: 56px;
-    border: 1px solid var(--line);
-    border-radius: 3px;
-    overflow: hidden;
-    background: repeating-linear-gradient(45deg, var(--free-block), var(--free-block) 6px, #161d28 6px, #161d28 12px);
-  }
-  .arena-block {
-    position: relative;
-    height: 100%;
-    border-right: 1px solid var(--bg);
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    font-weight: 600;
-    color: #0a0e14;
-    transition: filter 0.2s;
-    min-width: 2px;
+    justify-content: space-between;
   }
-  .arena-block:last-child { border-right: none; }
-  .arena-block.flash { animation: flash 0.5s ease; }
-  @keyframes flash { 0% { filter: brightness(2); } 100% { filter: brightness(1); } }
 
-  .arena-legend {
+  /* --- Physical Frames Arena --- */
+  .frames-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+  }
+  .frame-box {
+    background: var(--free-block);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 8px;
+    min-height: 52px;
     display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 10px;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    transition: all 0.2s ease;
+  }
+  .frame-box.occupied {
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+  .frame-num {
+    font-size: 9px;
+    color: var(--text-faint);
+  }
+  .frame-pid {
     font-size: 11px;
-    color: var(--text-dim);
+    font-weight: 700;
   }
-  .legend-swatch {
-    display: inline-block;
-    width: 10px; height: 10px;
+  .frame-seg {
+    font-size: 9px;
+    text-transform: uppercase;
+    padding: 2px 4px;
     border-radius: 2px;
-    margin-right: 5px;
-    vertical-align: -1px;
+    width: fit-content;
+    color: #000;
+    font-weight: 700;
   }
+  .seg-Code { background: var(--seg-code); color: #fff; }
+  .seg-Data { background: var(--seg-data); color: #000; }
+  .seg-Heap { background: var(--seg-heap); color: #000; }
+  .seg-Stack { background: var(--seg-stack); color: #fff; }
+
+  /* --- Hardware TLB Cache --- */
+  .tlb-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .tlb-slot {
+    background: var(--panel-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 11px;
+    min-height: 48px;
+  }
+  .tlb-slot.hit { animation: flashHit 0.6s ease; }
+  .tlb-slot.miss { animation: flashMiss 0.6s ease; }
+  @keyframes flashHit { 0% { border-color: var(--state-running); box-shadow: 0 0 12px var(--state-running); } 100% { border-color: var(--line); } }
+  @keyframes flashMiss { 0% { border-color: var(--state-waiting); box-shadow: 0 0 12px var(--state-waiting); } 100% { border-color: var(--line); } }
 
   /* --- Process state lanes --- */
   .lanes {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
+    gap: 12px;
   }
   .lane {
     background: var(--panel-raised);
     border: 1px solid var(--line);
     border-radius: 4px;
     padding: 10px;
-    min-height: 120px;
+    min-height: 110px;
   }
   .lane-title {
     font-size: 10px;
@@ -199,6 +264,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    color: var(--text-dim);
   }
   .lane-dot { width: 8px; height: 8px; border-radius: 50%; }
   .lane[data-state="READY"] .lane-dot { background: var(--state-ready); }
@@ -209,160 +275,178 @@
   .chip {
     background: var(--panel);
     border: 1px solid var(--line);
-    border-left: 3px solid var(--text-faint);
+    border-left: 3px solid var(--accent);
     border-radius: 3px;
     padding: 6px 8px;
     margin-bottom: 6px;
     font-size: 11px;
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    transition: transform 0.15s;
   }
-  .chip .pname { color: var(--text); }
-  .chip .paddr { color: var(--text-faint); font-size: 10px; }
 
-  /* --- Kernel log --- */
+  /* --- Log view --- */
   .log {
-    font-size: 11.5px;
-    line-height: 1.7;
-    max-height: 220px;
+    font-size: 11px;
+    line-height: 1.6;
+    height: 180px;
     overflow-y: auto;
-    background: #080b10;
+    background: #070a0f;
     border: 1px solid var(--line);
-    border-radius: 3px;
-    padding: 10px 12px;
+    border-radius: 4px;
+    padding: 10px;
   }
-  .log-line { white-space: pre; }
+  .log-line { white-space: pre-wrap; font-family: 'IBM Plex Mono', monospace; }
   .log-line .tk { color: var(--text-faint); }
-  .log-line .ty { color: var(--accent); }
-  .log-line .pd { color: var(--text-dim); }
-
-  .empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--text-dim);
-    font-size: 13px;
-  }
-  .empty-state code {
-    background: var(--panel-raised);
-    padding: 2px 6px;
-    border-radius: 3px;
-    color: var(--accent);
-  }
+  .log-line .tlb-hit { color: var(--state-running); font-weight: bold; }
+  .log-line .tlb-miss { color: var(--state-ready); }
+  .log-line .page-fault { color: var(--state-waiting); font-weight: bold; }
+  .log-line .page-evicted { color: #f43f5e; }
 </style>
 </head>
 <body>
 
 <header>
-  <div>
-    <div class="title">OS<span>SIM</span> — process &amp; memory simulator</div>
-    <div class="subtitle">real BuddyAllocator + round-robin scheduler, replayed tick by tick</div>
+  <div class="title-group">
+    <div class="title">MEM<span>LAB</span> — Virtual Memory &amp; Scheduler Visualizer</div>
+    <div class="subtitle">Segmented Virtual Memory, Page Tables, Hardware TLB, Demand Paging &amp; Round-Robin Scheduler</div>
   </div>
-  <div class="tick-readout">tick <b id="tickNum">—</b> / <span id="tickMax">—</span> &nbsp;·&nbsp; event <span id="evNum">0</span>/<span id="evMax">0</span></div>
+  <div class="metrics-bar">
+    <div class="metric-card">
+      <div class="metric-val" id="tickNum">0</div>
+      <div class="metric-label">Clock Tick</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val" id="tlbHitRate">0%</div>
+      <div class="metric-label">TLB Hit Rate</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val" id="pageFaultCount">0</div>
+      <div class="metric-label">Page Faults</div>
+    </div>
+  </div>
 </header>
 
 <div class="controls">
-  <label class="file-label" for="fileInput">load trace:</label>
-  <input type="file" id="fileInput" accept="application/json,.json">
-  <button id="stepBtn" disabled>Step &#9656;</button>
-  <button id="playBtn" class="primary" disabled>Play &#9654;</button>
-  <button id="resetBtn" disabled>Reset &#8634;</button>
-  <label class="file-label">speed
+  <button id="stepBtn">Step &#9656;</button>
+  <button id="playBtn" class="primary">Play &#9654;</button>
+  <button id="resetBtn">Reset &#8634;</button>
+  <div class="speed-ctrl">
+    <span>Speed:</span>
     <input type="range" id="speed" min="1" max="10" value="5">
-  </label>
+  </div>
 </div>
 
-<div id="app">
-  <div class="empty-state" id="emptyState">
-    Run <code>./os_sim_demo</code> to generate <code>events.json</code>, then load it above.
-  </div>
-
-  <div id="mainUi" style="display:none">
+<div class="grid-layout">
+  <div>
     <section class="panel">
-      <h2>Memory arena — byte-addressed, contiguous</h2>
-      <div class="arena-meta">
-        <span id="arenaBase">0x0000</span>
-        <span id="arenaOccupancy">0 / 0 bytes in use</span>
-        <span id="arenaTop">0x0000</span>
-      </div>
-      <div class="arena" id="arena"></div>
-      <div class="arena-legend" id="legend"></div>
+      <h2>Physical RAM Frames (32 Frames / 128 KB Physical Memory)</h2>
+      <div class="frames-grid" id="framesGrid"></div>
     </section>
 
     <section class="panel">
-      <h2>Process states</h2>
+      <h2>Process Execution &amp; Scheduling Lanes</h2>
       <div class="lanes">
         <div class="lane" data-state="READY"><div class="lane-title"><span class="lane-dot"></span>Ready</div><div id="lane-READY"></div></div>
         <div class="lane" data-state="RUNNING"><div class="lane-title"><span class="lane-dot"></span>Running</div><div id="lane-RUNNING"></div></div>
-        <div class="lane" data-state="WAITING"><div class="lane-title"><span class="lane-dot"></span>Waiting (I/O)</div><div id="lane-WAITING"></div></div>
+        <div class="lane" data-state="WAITING"><div class="lane-title"><span class="lane-dot"></span>Page Fault / I/O</div><div id="lane-WAITING"></div></div>
         <div class="lane" data-state="TERMINATED"><div class="lane-title"><span class="lane-dot"></span>Terminated</div><div id="lane-TERMINATED"></div></div>
       </div>
     </section>
 
     <section class="panel">
-      <h2>Kernel log</h2>
+      <h2>Kernel Execution &amp; Memory Event Log</h2>
       <div class="log" id="log"></div>
+    </section>
+  </div>
+
+  <div>
+    <section class="panel">
+      <h2>Hardware TLB Cache (8 Entries)</h2>
+      <div class="tlb-grid" id="tlbGrid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Active Process Virtual Memory Segments</h2>
+      <div id="segmentsView"></div>
     </section>
   </div>
 </div>
 
 <script>
 (function () {
-  const PID_COLORS = ['--pid-1','--pid-2','--pid-3','--pid-4','--pid-5','--pid-6','--pid-7','--pid-8','--pid-9','--pid-10'];
-
+  const NUM_FRAMES = 32;
+  const TLB_SIZE = 8;
+  
   let events = [];
-  let idx = 0;              // index of next event to apply
-  let processes = new Map(); // pid -> {name, state, offset, size, memReq}
-  let occupied = new Map();  // offset -> {pid, size}
-  let arenaSize = 0;
+  let idx = 0;
   let playing = false;
   let timer = null;
 
+  let frames = Array(NUM_FRAMES).fill(null); // {pid, vpn, segment}
+  let tlb = Array(TLB_SIZE).fill(null);
+  let processes = new Map(); // pid -> {name, state, segments}
+  let tlbHits = 0;
+  let tlbTotal = 0;
+  let pageFaults = 0;
+
   const el = (id) => document.getElementById(id);
 
-  function pidColor(pid) {
-    return `var(${PID_COLORS[(pid - 1) % PID_COLORS.length]})`;
+  function initUI() {
+    // Build Physical Frames
+    const framesGrid = el('framesGrid');
+    framesGrid.innerHTML = '';
+    for (let i = 0; i < NUM_FRAMES; ++i) {
+      const box = document.createElement('div');
+      box.className = 'frame-box';
+      box.id = `frame-${i}`;
+      box.innerHTML = `<div class="frame-num">PFN ${i}</div><div class="frame-pid" id="frame-pid-${i}">FREE</div><div id="frame-seg-${i}"></div>`;
+      framesGrid.appendChild(box);
+    }
+
+    // Build TLB Grid
+    const tlbGrid = el('tlbGrid');
+    tlbGrid.innerHTML = '';
+    for (let i = 0; i < TLB_SIZE; ++i) {
+      const slot = document.createElement('div');
+      slot.className = 'tlb-slot';
+      slot.id = `tlb-${i}`;
+      slot.innerHTML = `<div style="color:var(--text-dim);font-size:9px">SLOT ${i}</div><div id="tlb-val-${i}">EMPTY</div>`;
+      tlbGrid.appendChild(slot);
+    }
   }
 
   function reset() {
     idx = 0;
+    frames = Array(NUM_FRAMES).fill(null);
+    tlb = Array(TLB_SIZE).fill(null);
     processes = new Map();
-    occupied = new Map();
+    tlbHits = 0;
+    tlbTotal = 0;
+    pageFaults = 0;
+
     el('log').innerHTML = '';
-    el('evNum').textContent = '0';
-    el('tickNum').textContent = events.length ? events[0].tick : '—';
+    el('tickNum').textContent = '0';
+    el('tlbHitRate').textContent = '0%';
+    el('pageFaultCount').textContent = '0';
+
+    initUI();
     render();
-    updateButtons();
   }
 
   function loadEvents(data) {
     events = data;
-    arenaSize = 0;
-    for (const e of events) {
-      if (e.type === 'memory_allocated') arenaSize = Math.max(arenaSize, e.offset + e.size);
-    }
-    el('emptyState').style.display = 'none';
-    el('mainUi').style.display = 'block';
-    el('tickMax').textContent = events.length ? events[events.length - 1].tick : '—';
-    el('evMax').textContent = events.length;
-    el('arenaTop').textContent = '0x' + arenaSize.toString(16).padStart(4, '0');
     reset();
   }
 
   function applyEvent(e) {
+    el('tickNum').textContent = e.tick;
     let p;
+
     switch (e.type) {
       case 'process_created':
-        processes.set(e.pid, { pid: e.pid, name: e.name, state: 'NEW', memReq: e.memoryRequest, offset: null, size: null });
+        processes.set(e.pid, { pid: e.pid, name: e.name, state: 'NEW', segments: [] });
         break;
-      case 'memory_allocated':
+      case 'segment_created':
         p = processes.get(e.pid);
-        p.offset = e.offset; p.size = e.size;
-        occupied.set(e.offset, { pid: e.pid, size: e.size, flash: true });
-        break;
-      case 'memory_freed':
-        for (const [off, blk] of occupied) { if (blk.pid === e.pid) occupied.delete(off); }
+        if (p) p.segments.push({ name: e.segment, base_vpn: e.base_vpn, num_pages: e.num_pages });
         break;
       case 'process_ready':
         p = processes.get(e.pid); if (p) p.state = 'READY';
@@ -374,160 +458,161 @@
       case 'io_requested':
         p = processes.get(e.pid); if (p) p.state = 'WAITING';
         break;
-      case 'io_ack':
-        break; // followed immediately by process_ready in the trace
+      case 'tlb_hit':
+        tlbHits++; tlbTotal++;
+        flashTLB(e.pfn, 'hit');
+        break;
+      case 'tlb_miss':
+        tlbTotal++;
+        break;
+      case 'page_fault':
+        pageFaults++;
+        p = processes.get(e.pid); if (p) p.state = 'WAITING';
+        break;
+      case 'page_allocated':
+        frames[e.pfn] = { pid: e.pid, vpn: e.vpn, segment: e.segment };
+        updateTLBSlot(e.pid, e.vpn, e.pfn, e.segment);
+        break;
+      case 'page_evicted':
+        frames[e.pfn] = null;
+        break;
+      case 'page_freed':
+        frames[e.pfn] = null;
+        break;
       case 'process_terminated':
         p = processes.get(e.pid); if (p) p.state = 'TERMINATED';
         break;
     }
+
     appendLog(e);
+    render();
+  }
+
+  function updateTLBSlot(pid, vpn, pfn, segment) {
+    let slotIdx = tlb.findIndex(s => s === null);
+    if (slotIdx === -1) slotIdx = Math.floor(Math.random() * TLB_SIZE);
+    tlb[slotIdx] = { pid, vpn, pfn, segment };
+  }
+
+  function flashTLB(pfn, type) {
+    const slotIdx = tlb.findIndex(s => s && s.pfn === pfn);
+    if (slotIdx !== -1) {
+      const slotEl = el(`tlb-${slotIdx}`);
+      slotEl.className = `tlb-slot ${type}`;
+      setTimeout(() => slotEl.className = 'tlb-slot', 600);
+    }
   }
 
   function appendLog(e) {
     const line = document.createElement('div');
     line.className = 'log-line';
-    const extras = Object.keys(e).filter(k => !['tick','type','pid'].includes(k))
-      .map(k => `${k}=${e[k]}`).join(' ');
-    line.innerHTML = `<span class="tk">[t=${String(e.tick).padStart(3,' ')}]</span> <span class="ty">${e.type.padEnd(18,' ')}</span> <span class="pd">pid=${e.pid}</span> ${extras}`;
+    let cls = '';
+    if (e.type === 'tlb_hit') cls = 'tlb-hit';
+    else if (e.type === 'tlb_miss') cls = 'tlb-miss';
+    else if (e.type === 'page_fault') cls = 'page-fault';
+    else if (e.type === 'page_evicted') cls = 'page-evicted';
+
+    line.innerHTML = `<span class="tk">[t=${String(e.tick).padStart(3, ' ')}]</span> <span class="${cls}">${e.type.padEnd(16, ' ')}</span> pid=${e.pid} ${e.segment ? 'seg=' + e.segment : ''} ${e.pfn !== undefined ? 'pfn=' + e.pfn : ''} ${e.vpn !== undefined ? 'vpn=' + e.vpn : ''}`;
     el('log').appendChild(line);
     el('log').scrollTop = el('log').scrollHeight;
   }
 
   function render() {
-    // Memory arena
-    const arena = el('arena');
-    arena.innerHTML = '';
-    const sorted = [...occupied.entries()].sort((a, b) => a[0] - b[0]);
-    let cursor = 0;
-    let used = 0;
-    const seenPids = new Set();
-    for (const [offset, blk] of sorted) {
-      if (offset > cursor) {
-        const gap = document.createElement('div');
-        gap.className = 'arena-block';
-        gap.style.width = ((offset - cursor) / arenaSize * 100) + '%';
-        arena.appendChild(gap);
+    // Update Metrics
+    el('tlbHitRate').textContent = tlbTotal ? Math.round((tlbHits / tlbTotal) * 100) + '%' : '0%';
+    el('pageFaultCount').textContent = pageFaults;
+
+    // Render Frames
+    for (let i = 0; i < NUM_FRAMES; ++i) {
+      const f = frames[i];
+      const box = el(`frame-${i}`);
+      const pidEl = el(`frame-pid-${i}`);
+      const segEl = el(`frame-seg-${i}`);
+
+      if (f) {
+        box.className = 'frame-box occupied';
+        pidEl.textContent = `PID ${f.pid} (V:${f.vpn})`;
+        segEl.className = `frame-seg seg-${f.segment}`;
+        segEl.textContent = f.segment;
+      } else {
+        box.className = 'frame-box';
+        pidEl.textContent = 'FREE';
+        segEl.className = '';
+        segEl.textContent = '';
       }
-      const b = document.createElement('div');
-      b.className = 'arena-block' + (blk.flash ? ' flash' : '');
-      b.style.width = (blk.size / arenaSize * 100) + '%';
-      b.style.background = pidColor(blk.pid);
-      b.textContent = blk.size >= 400 ? `pid ${blk.pid}` : '';
-      b.title = `pid ${blk.pid} · offset 0x${offset.toString(16)} · ${blk.size} bytes`;
-      arena.appendChild(b);
-      blk.flash = false;
-      cursor = offset + blk.size;
-      used += blk.size;
-      seenPids.add(blk.pid);
-    }
-    if (cursor < arenaSize) {
-      const gap = document.createElement('div');
-      gap.className = 'arena-block';
-      gap.style.width = ((arenaSize - cursor) / arenaSize * 100) + '%';
-      arena.appendChild(gap);
-    }
-    el('arenaOccupancy').textContent = `${used} / ${arenaSize} bytes in use`;
-
-    // Legend
-    const legend = el('legend');
-    legend.innerHTML = '';
-    for (const pid of [...seenPids].sort((a,b)=>a-b)) {
-      const p = processes.get(pid);
-      const s = document.createElement('span');
-      s.innerHTML = `<span class="legend-swatch" style="background:${pidColor(pid)}"></span>pid ${pid} (${p ? p.name : '?'})`;
-      legend.appendChild(s);
     }
 
-    // Lanes
-    for (const state of ['READY','RUNNING','WAITING','TERMINATED']) {
-      const laneEl = el('lane-' + state);
+    // Render TLB
+    for (let i = 0; i < TLB_SIZE; ++i) {
+      const entry = tlb[i];
+      const valEl = el(`tlb-val-${i}`);
+      if (entry) {
+        valEl.innerHTML = `<b style="color:var(--accent)">P${entry.pid}</b> V:${entry.vpn} &rarr; PFN:${entry.pfn}`;
+      } else {
+        valEl.textContent = 'EMPTY';
+      }
+    }
+
+    // Render Process Lanes
+    ['READY', 'RUNNING', 'WAITING', 'TERMINATED'].forEach(st => {
+      const laneEl = el(`lane-${st}`);
       laneEl.innerHTML = '';
-      for (const p of processes.values()) {
-        if (p.state !== state) continue;
-        const chip = document.createElement('div');
-        chip.className = 'chip';
-        chip.style.borderLeftColor = pidColor(p.pid);
-        const addr = p.offset !== null ? `0x${p.offset.toString(16)}` : '—';
-        chip.innerHTML = `<span class="pname">${p.name} <span class="paddr">#${p.pid}</span></span><span class="paddr">${addr}</span>`;
-        laneEl.appendChild(chip);
+      for (const [pid, p] of processes) {
+        if (p.state === st) {
+          const chip = document.createElement('div');
+          chip.className = 'chip';
+          chip.innerHTML = `<b>P${p.pid}</b> (${p.name})`;
+          laneEl.appendChild(chip);
+        }
+      }
+    });
+
+    // Render Segments
+    const segsView = el('segmentsView');
+    segsView.innerHTML = '';
+    for (const [pid, p] of processes) {
+      if (p.state !== 'TERMINATED') {
+        const pdiv = document.createElement('div');
+        pdiv.style.marginBottom = '12px';
+        pdiv.innerHTML = `<div style="font-size:11px;font-weight:bold;margin-bottom:4px">Process ${p.pid} (${p.name})</div>` +
+          p.segments.map(s => `<span class="frame-seg seg-${s.name}" style="margin-right:4px;display:inline-block">${s.name}: VPN ${s.base_vpn}..${s.base_vpn + s.num_pages - 1}</span>`).join('');
+        segsView.appendChild(pdiv);
       }
     }
-
-    el('evNum').textContent = idx;
-    if (idx > 0) el('tickNum').textContent = events[idx - 1].tick;
   }
 
   function step() {
-    if (idx >= events.length) { pause(); return; }
-    applyEvent(events[idx]);
-    idx++;
-    render();
-    updateButtons();
+    if (idx < events.length) {
+      applyEvent(events[idx++]);
+    } else {
+      stop();
+    }
   }
 
   function play() {
     if (playing) return;
     playing = true;
-    el('playBtn').textContent = 'Pause \u23F8';
-    const speed = () => 900 - (el('speed').value * 80);
-    const tick = () => {
-      if (idx >= events.length) { pause(); return; }
-      step();
-      timer = setTimeout(tick, speed());
-    };
-    tick();
+    el('playBtn').textContent = 'Pause ❚❚';
+    const interval = 1100 - el('speed').value * 100;
+    timer = setInterval(step, interval);
   }
 
-  function pause() {
+  function stop() {
     playing = false;
-    el('playBtn').textContent = 'Play \u25B6';
-    clearTimeout(timer);
+    el('playBtn').textContent = 'Play ►';
+    if (timer) clearInterval(timer);
   }
-
-  function updateButtons() {
-    const atEnd = idx >= events.length;
-    el('stepBtn').disabled = atEnd;
-    el('playBtn').disabled = atEnd && idx === events.length;
-    el('resetBtn').disabled = idx === 0;
-    if (atEnd) pause();
-  }
-
-  el('fileInput').addEventListener('change', (ev) => {
-    const file = ev.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result);
-        loadEvents(data);
-        el('stepBtn').disabled = false;
-        el('playBtn').disabled = false;
-        el('resetBtn').disabled = false;
-      } catch (err) {
-        alert('Could not parse that file as JSON: ' + err.message);
-      }
-    };
-    reader.readAsText(file);
-  });
 
   el('stepBtn').addEventListener('click', step);
-  el('playBtn').addEventListener('click', () => playing ? pause() : play());
+  el('playBtn').addEventListener('click', () => playing ? stop() : play());
   el('resetBtn').addEventListener('click', reset);
 
-  // Best-effort convenience: if served over http(s) (not file://), try to
-  // auto-load events.json sitting next to this page.
-  if (location.protocol !== 'file:') {
-    fetch('events.json').then(r => r.ok ? r.json() : null).then(data => {
-      if (data) {
-        loadEvents(data);
-        el('stepBtn').disabled = false;
-        el('playBtn').disabled = false;
-        el('resetBtn').disabled = false;
-      }
-    }).catch(() => {});
-  }
+  // Auto-fetch events.json
+  fetch('events.json')
+    .then(r => r.json())
+    .then(loadEvents)
+    .catch(err => console.log('Waiting for events.json...', err));
 })();
 </script>
-
 </body>
 </html>
