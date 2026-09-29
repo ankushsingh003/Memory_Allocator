@@ -107,13 +107,16 @@ and free memory. The visualizer just replays the resulting event trace.
   splitting/coalescing, and freeing on process termination
 
 ### Build & run the simulation
+
+The advanced simulator is now part of the `memlab` submodule. You can build it using the main CMake project:
+
 ```bash
-g++ -std=c++20 -Iinclude examples/OSSimDemo.cpp -o os_sim_demo
-./os_sim_demo
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build .
+./memlab/visualizer_demo
 ```
-This writes `events.json` — a full trace of every process/memory event,
-tick by tick. (It's also wired into `CMakeLists.txt` as the `os_sim_demo`
-target if you're building the whole project via CMake.)
+This writes `events.json` — a full trace of every process/memory event, tick by tick.
 
 ### Watch it
 Open `frontend/index.html` directly in a browser (no server needed) and
