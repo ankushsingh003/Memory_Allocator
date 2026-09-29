@@ -21,3 +21,7 @@
 .DS_Store
 Thumbs.db
 *.zip
+
+# Generated frontend trace files
+frontend/events.json
+frontend/contiguous_events.json

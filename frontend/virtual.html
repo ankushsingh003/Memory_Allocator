@@ -481,7 +481,7 @@
   el('playBtn').addEventListener('click', () => playing ? stop() : play());
   el('resetBtn').addEventListener('click', reset);
 
-  fetch('events.json').then(r => r.json()).then(data => {
+  fetch('events.json').then(r => r.ok ? r : fetch('sample_events.json')).then(r => r.json()).then(data => {
     events = data; reset();
     el('stepBtn').disabled = false;
     el('playBtn').disabled = false;
