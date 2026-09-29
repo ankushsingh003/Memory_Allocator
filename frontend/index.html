@@ -97,9 +97,9 @@
   }
 
   .circle-container {
-    width: 340px;
-    height: 340px;
-    border-radius: 50%;
+    width: 480px;
+    height: 300px;
+    border-radius: 20px;
     position: relative;
     display: flex;
     align-items: center;
@@ -118,7 +118,7 @@
   }
 
   .circle-container:hover {
-    transform: scale(1.08) translateY(-15px) !important;
+    transform: scale(1.05) translateY(-15px) !important;
     animation-play-state: paused;
     z-index: 20;
   }
@@ -127,8 +127,9 @@
   .circle-bg {
     position: absolute;
     inset: 0;
-    border-radius: 50%;
-    background-size: cover;
+    border-radius: 20px;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
     background-position: center;
     border: 3px solid rgba(255,255,255,0.1);
     transition: all 0.5s ease;
@@ -147,7 +148,7 @@
   .circle-overlay {
     position: absolute;
     inset: 0;
-    border-radius: 50%;
+    border-radius: 20px;
     background: rgba(2, 6, 23, 0.85); /* Dark slate overlay */
     backdrop-filter: blur(8px);
     display: flex;
