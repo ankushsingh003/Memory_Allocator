@@ -40,3 +40,6 @@ target_link_libraries(sched_sim_main memlab_common)
 
 add_executable(vm_sim_main sim/vm_sim_main.cpp)
 target_link_libraries(vm_sim_main memlab_common)
+
+add_executable(visualizer_demo sim/visualizer_demo.cpp)
+target_link_libraries(visualizer_demo memlab_common)
