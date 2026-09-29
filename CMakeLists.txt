@@ -74,3 +74,8 @@ target_link_libraries(alloc_bench PRIVATE benchmark::benchmark_main)
 # -----------------------------------------------------------------------------
 enable_testing()
 add_test(NAME AllTests COMMAND alloc_asan)
+
+# -----------------------------------------------------------------------------
+# Memlab Simulator
+# -----------------------------------------------------------------------------
+add_subdirectory(memlab)
