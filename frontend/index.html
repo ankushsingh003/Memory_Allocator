@@ -2,186 +2,683 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MEMLAB — Simulator Dashboard</title>
+<title>MEMLAB — Memory Systems Simulator</title>
+<meta name="description" content="Interactive C++ Memory & OS Simulator — Virtual Memory Paging, TLB, Contiguous Allocation, Round-Robin Scheduling">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #07090f;
-    --panel: #0f1420;
-    --panel2: #141c2e;
+    --bg: #060810;
+    --panel: #0c1018;
+    --panel2: #101620;
     --line: #1a2236;
-    --text: #e2e8f0;
-    --dim: #64748b;
-    --accent: #38bdf8;
-    --green: #22c55e;
-    --purple: #a855f7;
+    --line2: #0f1824;
+    --text: #ccd6f6;
+    --dim: #546082;
+    --faint: #2a3550;
+    --accent: #64ffda;
+    --accent2: #0a8c6a;
     --orange: #f97316;
+    --orange-dim: rgba(249,115,22,0.08);
+    --blue: #38bdf8;
+    --blue-dim: rgba(56,189,248,0.08);
+    --green: #22c55e;
+    --red: #ef4444;
+    --purple: #a855f7;
+    --yellow: #eab308;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ROUTER VIEWS */
+  #view-root { display: block; }
+  #view-frame { display: none; width: 100%; height: 100vh; border: none; }
+
   body {
     background: var(--bg);
     color: var(--text);
     font-family: 'IBM Plex Mono', monospace;
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 24px;
+    overflow-x: hidden;
   }
 
-  .logo {
+  /* ─── SCANLINE OVERLAY ─── */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* ─── TOP STATUS BAR ─── */
+  .status-bar {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 6px 24px; font-size: 10px; color: var(--dim);
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .status-bar .logo-small {
+    font-family: 'Space Mono', monospace; font-weight: 700;
+    color: var(--accent); letter-spacing: 0.12em; font-size: 11px;
+    margin-right: 8px;
+  }
+  .status-sep { color: var(--faint); }
+  .led { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+  .led.on  { background: var(--green); box-shadow: 0 0 6px var(--green); animation: blink 2s infinite; }
+  .led.on2 { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .status-right { margin-left: auto; display: flex; gap: 16px; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ─── HERO ─── */
+  .hero {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center;
+    padding: 64px 24px 40px;
+    position: relative;
+  }
+
+  /* Circuit grid background */
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(var(--line2) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line2) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse 70% 80% at 50% 50%, black 40%, transparent 100%);
+    pointer-events: none;
+  }
+
+  .chip-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 4px; padding: 6px 14px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim);
+    margin-bottom: 28px;
+  }
+  .chip-badge .led { animation: none; }
+
+  .hero-title {
     font-family: 'Space Mono', monospace;
-    font-size: 36px;
+    font-size: clamp(32px, 6vw, 64px);
     font-weight: 700;
-    letter-spacing: 0.08em;
-    margin-bottom: 6px;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+    margin-bottom: 16px;
+    position: relative;
   }
-  .logo span { color: var(--accent); }
-  .tagline {
-    color: var(--dim);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    margin-bottom: 60px;
-    text-align: center;
+  .hero-title .accent { color: var(--accent); }
+  .hero-title .sub-accent { color: var(--blue); }
+
+  /* Glitch effect on title */
+  .hero-title::before {
+    content: attr(data-text);
+    position: absolute; top: 0; left: 0; right: 0;
+    color: var(--accent);
+    clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%);
+    transform: translate(-2px, 0);
+    opacity: 0;
+    animation: glitch 6s infinite;
+  }
+  @keyframes glitch {
+    0%,94%,100% { opacity: 0; }
+    95% { opacity: 0.3; transform: translate(-3px, 0); }
+    97% { opacity: 0.3; transform: translate(3px, 0); }
+    99% { opacity: 0; }
   }
 
-  .cards {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    max-width: 860px;
-    width: 100%;
+  .hero-desc {
+    max-width: 560px; font-size: 13px; color: var(--dim);
+    line-height: 1.8; margin-bottom: 48px; position: relative;
   }
+
+  /* ─── MEMORY HIERARCHY DIAGRAM ─── */
+  .hierarchy {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0; margin-bottom: 56px; position: relative;
+  }
+  .hier-node {
+    background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 6px; padding: 10px 16px;
+    text-align: center; cursor: default;
+    transition: all 0.25s;
+  }
+  .hier-node .h-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); }
+  .hier-node .h-val   { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; margin-top: 2px; }
+  .hier-node.cpu  { border-color: var(--accent2); }
+  .hier-node.tlb  { border-color: #1e4060; }
+  .hier-node.ram  { border-color: #1e3a1a; }
+  .hier-node.disk { border-color: #3a1a2e; }
+  .hier-node.cpu  .h-val { color: var(--accent); }
+  .hier-node.tlb  .h-val { color: var(--blue); }
+  .hier-node.ram  .h-val { color: var(--green); }
+  .hier-node.disk .h-val { color: var(--purple); }
+
+  .hier-arrow {
+    width: 40px; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 2px; position: relative;
+  }
+  .hier-arrow::before {
+    content: '';
+    width: 100%; height: 1px;
+    background: linear-gradient(90deg, var(--line), var(--accent2), var(--line));
+    animation: flowRight 2s linear infinite;
+  }
+  .hier-arrow .arrow-label { font-size: 8px; color: var(--faint); text-transform: uppercase; }
+  @keyframes flowRight {
+    0%   { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
+  }
+
+  /* ─── CARDS ─── */
+  .cards-section { padding: 0 24px 60px; max-width: 960px; margin: 0 auto; }
+  .section-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em;
+    color: var(--dim); margin-bottom: 20px; display: flex; align-items: center; gap: 12px;
+  }
+  .section-label::before, .section-label::after {
+    content: ''; flex: 1; height: 1px; background: var(--line);
+  }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 
   .card {
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 10px;
-    padding: 32px;
-    text-decoration: none;
-    color: var(--text);
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    transition: all 0.25s ease;
+    text-decoration: none; color: var(--text);
+    display: flex; flex-direction: column;
+    overflow: hidden; cursor: pointer;
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s;
     position: relative;
-    overflow: hidden;
   }
-  .card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    opacity: 0;
-    transition: opacity 0.25s;
-  }
-  .card.contiguous::before { background: linear-gradient(90deg, var(--orange), var(--green)); }
-  .card.virtual::before { background: linear-gradient(90deg, var(--accent), var(--purple)); }
-  .card:hover { border-color: rgba(255,255,255,0.12); transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
-  .card:hover::before { opacity: 1; }
+  .card:hover { transform: translateY(-6px); }
+  .card.contiguous:hover { border-color: rgba(249,115,22,0.35); box-shadow: 0 24px 48px rgba(249,115,22,0.08), 0 0 0 1px rgba(249,115,22,0.12); }
+  .card.virtual:hover    { border-color: rgba(56,189,248,0.35); box-shadow: 0 24px 48px rgba(56,189,248,0.08), 0 0 0 1px rgba(56,189,248,0.12); }
 
-  .card-icon {
-    font-size: 36px;
-    margin-bottom: 4px;
+  /* Animated top border */
+  .card-topbar {
+    height: 3px; width: 0;
+    transition: width 0.5s ease;
   }
+  .card:hover .card-topbar { width: 100%; }
+  .card.contiguous .card-topbar { background: linear-gradient(90deg, var(--orange), var(--yellow)); }
+  .card.virtual    .card-topbar { background: linear-gradient(90deg, var(--blue), var(--purple)); }
+
+  .card-body { padding: 28px 28px 24px; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+
+  /* Mini visualizer preview inside card */
+  .card-preview {
+    background: #070a10;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px;
+    margin-bottom: 4px;
+    height: 110px;
+    overflow: hidden;
+    position: relative;
+  }
+  .card.contiguous .card-preview { border-color: rgba(249,115,22,0.15); }
+  .card.virtual    .card-preview { border-color: rgba(56,189,248,0.15); }
+
+  /* Contiguous allocator mini-sim */
+  .mini-arena {
+    display: flex; height: 28px; border-radius: 3px; overflow: hidden;
+    margin-bottom: 10px;
+    background: repeating-linear-gradient(45deg, #0d1520, #0d1520 4px, #0a1018 4px, #0a1018 8px);
+  }
+  .mini-block { height: 100%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; color: #000; transition: width 0.4s ease; }
+  .mini-procs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mini-proc { font-size: 9px; padding: 2px 7px; border-radius: 3px; font-weight: 600; }
+
+  /* Virtual memory mini-sim */
+  .mini-frames { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
+  .mini-frame {
+    height: 18px; border-radius: 2px;
+    background: #0d1520; border: 1px solid var(--line);
+    font-size: 7px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.4s;
+  }
+  .mini-tlb-row { display: flex; gap: 4px; margin-top: 8px; }
+  .mini-tlb-entry {
+    height: 16px; flex: 1; border-radius: 2px;
+    background: #0d1520; border: 1px solid var(--line);
+    font-size: 7px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.3s;
+  }
+
   .card-title {
-    font-family: 'Space Mono', monospace;
-    font-size: 17px;
-    font-weight: 700;
+    font-family: 'Space Mono', monospace; font-size: 16px; font-weight: 700;
   }
   .card.contiguous .card-title { color: var(--orange); }
-  .card.virtual .card-title { color: var(--accent); }
-  .card-desc {
-    font-size: 12px;
-    color: var(--dim);
-    line-height: 1.7;
-  }
-  .card-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
-  }
-  .tag {
-    font-size: 10px;
-    padding: 3px 8px;
-    border-radius: 3px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .tag-orange { background: rgba(249,115,22,0.15); color: var(--orange); border: 1px solid rgba(249,115,22,0.3); }
-  .tag-green  { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
-  .tag-blue   { background: rgba(56,189,248,0.15); color: var(--accent); border: 1px solid rgba(56,189,248,0.3); }
-  .tag-purple { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+  .card.virtual    .card-title { color: var(--blue); }
 
-  .card-arrow {
-    margin-top: auto;
-    font-size: 12px;
-    color: var(--dim);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .card:hover .card-arrow { color: var(--text); }
+  .card-desc { font-size: 12px; color: var(--dim); line-height: 1.75; }
 
+  .card-specs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .spec-tag {
+    font-size: 10px; padding: 3px 9px; border-radius: 3px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .tag-orange  { background: rgba(249,115,22,0.12); color: var(--orange); border: 1px solid rgba(249,115,22,0.25); }
+  .tag-yellow  { background: rgba(234,179,8,0.12);  color: var(--yellow); border: 1px solid rgba(234,179,8,0.25); }
+  .tag-blue    { background: rgba(56,189,248,0.12);  color: var(--blue);   border: 1px solid rgba(56,189,248,0.25); }
+  .tag-purple  { background: rgba(168,85,247,0.12);  color: var(--purple); border: 1px solid rgba(168,85,247,0.25); }
+  .tag-green   { background: rgba(34,197,94,0.12);   color: var(--green);  border: 1px solid rgba(34,197,94,0.25); }
+
+  .card-launch {
+    margin-top: auto; display: flex; align-items: center; justify-content: space-between;
+    padding-top: 14px; border-top: 1px solid var(--line);
+    font-size: 12px;
+  }
+  .launch-btn {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 12px;
+    padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer;
+    font-family: 'IBM Plex Mono', monospace; text-decoration: none;
+    transition: all 0.2s;
+  }
+  .card.contiguous .launch-btn { background: rgba(249,115,22,0.15); color: var(--orange); border: 1px solid rgba(249,115,22,0.3); }
+  .card.contiguous .launch-btn:hover { background: var(--orange); color: #060810; }
+  .card.virtual    .launch-btn { background: rgba(56,189,248,0.12); color: var(--blue); border: 1px solid rgba(56,189,248,0.3); }
+  .card.virtual    .launch-btn:hover { background: var(--blue); color: #060810; }
+  .launch-arrow { font-size: 14px; transition: transform 0.2s; }
+  .launch-btn:hover .launch-arrow { transform: translateX(4px); }
+
+  /* ─── FOOTER ─── */
   footer {
-    margin-top: 60px;
-    font-size: 11px;
-    color: var(--dim);
-    text-align: center;
+    border-top: 1px solid var(--line); padding: 20px 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 10px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.08em;
   }
   footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* ─── FRAME ROUTER ─── */
+  #view-frame { position: fixed; inset: 0; z-index: 900; background: var(--bg); }
+  .frame-back-bar {
+    display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 950;
+    background: rgba(6,8,16,0.95); border-bottom: 1px solid var(--line);
+    padding: 8px 20px; align-items: center; gap: 16px;
+    backdrop-filter: blur(8px);
+  }
+  .frame-back-bar.active { display: flex; }
+  .back-btn {
+    background: var(--panel2); border: 1px solid var(--line);
+    color: var(--dim); font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; padding: 6px 14px; border-radius: 4px;
+    cursor: pointer; transition: all 0.15s; text-decoration: none;
+  }
+  .back-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .frame-title { font-size: 12px; color: var(--dim); }
+  .frame-title span { color: var(--text); font-weight: 600; }
 </style>
 </head>
 <body>
 
-<div class="logo">MEM<span>LAB</span></div>
-<div class="tagline">C++ Memory &amp; OS Scheduling Simulator Suite</div>
-
-<div class="cards">
-
-  <a class="card contiguous" href="contiguous.html" id="contiguousCard">
-    <div class="card-icon">🧱</div>
-    <div class="card-title">Contiguous Allocator</div>
-    <div class="card-desc">
-      First-Fit contiguous memory allocation with Round-Robin CPU scheduling.
-      Watch processes claim and release flat byte-addressed regions in real time.
-    </div>
-    <div class="card-tags">
-      <span class="tag tag-orange">First-Fit</span>
-      <span class="tag tag-green">Round-Robin</span>
-      <span class="tag tag-orange">Memory Arena</span>
-      <span class="tag tag-green">Byte-addressed</span>
-    </div>
-    <div class="card-arrow">Open visualizer →</div>
-  </a>
-
-  <a class="card virtual" href="virtual.html" id="virtualCard">
-    <div class="card-icon">🗂️</div>
-    <div class="card-title">Virtual Memory &amp; Paging</div>
-    <div class="card-desc">
-      Segmented virtual memory with demand paging, hardware TLB simulation,
-      page faults, FIFO page replacement, and physical frame tracking.
-    </div>
-    <div class="card-tags">
-      <span class="tag tag-blue">Page Tables</span>
-      <span class="tag tag-purple">TLB Cache</span>
-      <span class="tag tag-blue">Demand Paging</span>
-      <span class="tag tag-purple">FIFO Replacement</span>
-    </div>
-    <div class="card-arrow">Open visualizer →</div>
-  </a>
-
+<!-- ─── FRAME BACK BAR (shown when a page is loaded inside the iframe router) ─── -->
+<div class="frame-back-bar" id="backBar">
+  <button class="back-btn" id="backBtn">← Dashboard</button>
+  <div class="frame-title">MEMLAB — <span id="frameTitle">Visualizer</span></div>
 </div>
 
-<footer>
-  memlab — <a href="https://github.com/ankushsingh003/Memory_Allocator" target="_blank">github.com/ankushsingh003/Memory_Allocator</a>
-  &nbsp;·&nbsp; branch: Virtual_Memory_Allocation
-</footer>
+<!-- ─── IFRAME ROUTER (hidden by default) ─── -->
+<iframe id="view-frame" title="Visualizer"></iframe>
+
+<!-- ─── LANDING PAGE ─── -->
+<div id="view-root">
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <span class="logo-small">MEMLAB</span>
+    <span class="status-sep">|</span>
+    <span><span class="led on"></span>Simulator Active</span>
+    <span class="status-sep">·</span>
+    <span><span class="led on2"></span>8 Processes</span>
+    <span class="status-sep">·</span>
+    <span>Round-Robin Scheduler</span>
+    <span class="status-sep">·</span>
+    <span>C++11 Backend</span>
+    <div class="status-right">
+      <span id="clockDisplay"></span>
+      <span class="status-sep">|</span>
+      <span>branch: Virtual_Memory_Allocation</span>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="chip-badge">
+      <span class="led on" style="width:5px;height:5px"></span>
+      OS Memory Systems — Interactive Simulation Suite
+    </div>
+
+    <div class="hero-title" data-text="MEMLAB">
+      MEM<span class="accent">LAB</span>
+    </div>
+    <div style="font-family:'Space Mono',monospace; font-size:clamp(14px,2.5vw,22px); color:var(--dim); margin-bottom:16px; letter-spacing:0.06em;">
+      Memory Systems Simulator
+    </div>
+
+    <p class="hero-desc">
+      A real C++ simulation of OS memory management — from raw byte-addressed
+      contiguous allocation to full virtual memory with demand paging, hardware TLB,
+      segmented address spaces, and page replacement.
+    </p>
+
+    <!-- Memory Hierarchy Diagram -->
+    <div class="hierarchy">
+      <div class="hier-node cpu">
+        <div class="h-label">CPU</div>
+        <div class="h-val">8 Cores</div>
+      </div>
+      <div class="hier-arrow">
+        <div class="arrow-label">tlb</div>
+      </div>
+      <div class="hier-node tlb">
+        <div class="h-label">TLB Cache</div>
+        <div class="h-val">8 Entries</div>
+      </div>
+      <div class="hier-arrow">
+        <div class="arrow-label">page</div>
+      </div>
+      <div class="hier-node ram">
+        <div class="h-label">Physical RAM</div>
+        <div class="h-val">32 Frames</div>
+      </div>
+      <div class="hier-arrow">
+        <div class="arrow-label">swap</div>
+      </div>
+      <div class="hier-node disk">
+        <div class="h-label">Disk / Swap</div>
+        <div class="h-val">∞</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cards -->
+  <div class="cards-section">
+    <div class="section-label">Select a Simulator Module</div>
+    <div class="cards">
+
+      <!-- Card 1: Contiguous -->
+      <div class="card contiguous" id="cardContiguous" onclick="navigate('contiguous')">
+        <div class="card-topbar"></div>
+        <div class="card-body">
+          <div class="card-preview" id="previewContiguous">
+            <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Memory Arena — 8 KB</div>
+            <div class="mini-arena" id="miniArena"></div>
+            <div class="mini-procs" id="miniProcs"></div>
+          </div>
+          <div class="card-title">🧱 Contiguous Allocator</div>
+          <div class="card-desc">
+            Watch processes claim and release flat <b style="color:var(--orange)">byte-addressed</b> memory regions
+            in real time using a First-Fit allocator and Round-Robin CPU scheduler.
+            Observe <b style="color:var(--yellow)">fragmentation</b> form as processes terminate.
+          </div>
+          <div class="card-specs">
+            <span class="spec-tag tag-orange">First-Fit</span>
+            <span class="spec-tag tag-yellow">Round-Robin</span>
+            <span class="spec-tag tag-orange">Fragmentation</span>
+            <span class="spec-tag tag-green">Coalescing</span>
+          </div>
+          <div class="card-launch">
+            <span style="font-size:11px;color:var(--faint)">8 KB Arena · 8 Processes</span>
+            <a class="launch-btn" onclick="navigate('contiguous');event.stopPropagation()">
+              Launch <span class="launch-arrow">→</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: Virtual Memory -->
+      <div class="card virtual" id="cardVirtual" onclick="navigate('virtual')">
+        <div class="card-topbar"></div>
+        <div class="card-body">
+          <div class="card-preview" id="previewVirtual">
+            <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Physical Frames (32) · TLB (8)</div>
+            <div class="mini-frames" id="miniFrames"></div>
+            <div class="mini-tlb-row" id="miniTLB"></div>
+          </div>
+          <div class="card-title">🗂️ Virtual Memory &amp; Paging</div>
+          <div class="card-desc">
+            Explore <b style="color:var(--blue)">segmented virtual address spaces</b> with
+            demand paging, hardware TLB lookups, page fault handling, and
+            <b style="color:var(--purple)">FIFO page replacement</b> across 8 processes.
+          </div>
+          <div class="card-specs">
+            <span class="spec-tag tag-blue">Page Tables</span>
+            <span class="spec-tag tag-purple">TLB Cache</span>
+            <span class="spec-tag tag-blue">Demand Paging</span>
+            <span class="spec-tag tag-purple">FIFO Eviction</span>
+            <span class="spec-tag tag-green">Segments</span>
+          </div>
+          <div class="card-launch">
+            <span style="font-size:11px;color:var(--faint)">32 Frames · 8-slot TLB · Code/Data/Heap/Stack</span>
+            <a class="launch-btn" onclick="navigate('virtual');event.stopPropagation()">
+              Launch <span class="launch-arrow">→</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>
+    <span>MEMLAB v1.0 — C++ Memory Systems Research Platform</span>
+    <span>
+      <a href="https://github.com/ankushsingh003/Memory_Allocator" target="_blank">github.com/ankushsingh003/Memory_Allocator</a>
+      &nbsp;·&nbsp; branch: Virtual_Memory_Allocation
+    </span>
+  </footer>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────
+   JS Hash Router
+   /         → landing page (view-root)
+   /#/virtual → virtual.html in iframe
+   /#/contiguous → contiguous.html in iframe
+───────────────────────────────────────────────── */
+const ROUTES = {
+  'virtual':    { file: 'virtual.html',    title: 'Virtual Memory & Paging Simulator' },
+  'contiguous': { file: 'contiguous.html', title: 'Contiguous Allocator Simulator' }
+};
+
+const frame   = document.getElementById('view-frame');
+const root    = document.getElementById('view-root');
+const backBar = document.getElementById('backBar');
+const backBtn = document.getElementById('backBtn');
+const frameTitleEl = document.getElementById('frameTitle');
+
+function showLanding() {
+  frame.style.display = 'none';
+  frame.src = '';
+  root.style.display = 'block';
+  backBar.classList.remove('active');
+}
+
+function showRoute(name) {
+  const route = ROUTES[name];
+  if (!route) { showLanding(); return; }
+
+  root.style.display = 'none';
+  frame.src = route.file;
+  frame.style.display = 'block';
+  frame.style.marginTop = '40px'; // space for back bar
+  frameTitleEl.textContent = route.title;
+  backBar.classList.add('active');
+}
+
+function navigate(name) {
+  window.location.hash = '/' + name;
+}
+
+function handleRoute() {
+  const hash = window.location.hash; // e.g. "#/virtual"
+  if (!hash || hash === '#' || hash === '#/') {
+    showLanding();
+  } else {
+    const name = hash.replace('#/', '').replace('/', '');
+    showRoute(name);
+  }
+}
+
+backBtn.addEventListener('click', () => {
+  window.location.hash = '/';
+});
+
+window.addEventListener('hashchange', handleRoute);
+window.addEventListener('load', handleRoute);
+handleRoute();
+
+/* ─────────────────────────────────────────────────
+   Live-animating mini previews on the landing cards
+───────────────────────────────────────────────── */
+(function () {
+  // ── Contiguous mini-arena animation ──
+  const PID_COLORS = ['#f97316','#06b6d4','#8b5cf6','#10b981','#ec4899','#eab308','#14b8a6','#a855f7'];
+  const NAMES = ['init','shell','cc','www','log','db','net','rdr'];
+  const TOTAL = 8192;
+
+  let blocks = []; // {pid, size, alive}
+
+  function randomSize() { return [128,256,512,1024,2048][Math.floor(Math.random()*5)]; }
+
+  function renderMiniArena() {
+    const arena = document.getElementById('miniArena');
+    const procs = document.getElementById('miniProcs');
+    if (!arena || !procs) return;
+    arena.innerHTML = '';
+    let cursor = 0;
+    const alive = blocks.filter(b => b.alive);
+    alive.sort((a,b) => a.offset - b.offset);
+    for (const b of alive) {
+      if (b.offset > cursor) { // free gap
+        const gap = document.createElement('div');
+        gap.className = 'mini-block';
+        gap.style.width = (((b.offset - cursor) / TOTAL) * 100) + '%';
+        gap.style.background = 'none';
+        arena.appendChild(gap);
+      }
+      const el = document.createElement('div');
+      el.className = 'mini-block';
+      el.style.width = ((b.size / TOTAL) * 100) + '%';
+      el.style.background = PID_COLORS[b.pid % PID_COLORS.length];
+      el.style.minWidth = '4px';
+      el.textContent = b.size >= 512 ? 'P'+(b.pid+1) : '';
+      arena.appendChild(el);
+      cursor = b.offset + b.size;
+    }
+    if (cursor < TOTAL) {
+      const gap = document.createElement('div');
+      gap.className = 'mini-block'; gap.style.flex = '1'; gap.style.background = 'none';
+      arena.appendChild(gap);
+    }
+
+    // Process chips
+    procs.innerHTML = '';
+    alive.slice(0,5).forEach(b => {
+      const chip = document.createElement('span');
+      chip.className = 'mini-proc';
+      chip.style.background = PID_COLORS[b.pid % PID_COLORS.length] + '22';
+      chip.style.color = PID_COLORS[b.pid % PID_COLORS.length];
+      chip.style.border = '1px solid ' + PID_COLORS[b.pid % PID_COLORS.length] + '55';
+      chip.textContent = 'P'+(b.pid+1)+' '+NAMES[b.pid % NAMES.length];
+      procs.appendChild(chip);
+    });
+  }
+
+  function tickContiguous() {
+    // Add a process
+    if (blocks.filter(b=>b.alive).length < 5 && Math.random() < 0.6) {
+      const pid = Math.floor(Math.random() * 8);
+      const size = randomSize();
+      let offset = 0;
+      const alive = blocks.filter(b=>b.alive).sort((a,b)=>a.offset-b.offset);
+      let placed = false;
+      for (const b of alive) {
+        if (b.offset - offset >= size) { placed = true; break; }
+        offset = b.offset + b.size;
+      }
+      if (!placed && TOTAL - offset >= size) placed = true;
+      if (placed) blocks.push({pid, size, offset, alive: true});
+    }
+    // Kill a random process
+    const alive = blocks.filter(b=>b.alive);
+    if (alive.length > 2 && Math.random() < 0.35) {
+      alive[Math.floor(Math.random()*alive.length)].alive = false;
+    }
+    renderMiniArena();
+  }
+
+  // ── Virtual mini-frames animation ──
+  const SEG_COLORS = {Code:'#3b82f6', Data:'#10b981', Heap:'#f59e0b', Stack:'#a855f7'};
+  const SEGS = ['Code','Data','Heap','Stack'];
+  let miniFrames = Array(16).fill(null);
+  let miniTLB = Array(8).fill(null);
+
+  function renderMiniVM() {
+    const fg = document.getElementById('miniFrames');
+    const tg = document.getElementById('miniTLB');
+    if (!fg || !tg) return;
+    fg.innerHTML = '';
+    for (let i = 0; i < 16; i++) {
+      const el = document.createElement('div');
+      el.className = 'mini-frame';
+      const f = miniFrames[i];
+      if (f) {
+        el.style.background = PID_COLORS[f.pid % PID_COLORS.length] + '33';
+        el.style.borderColor = PID_COLORS[f.pid % PID_COLORS.length] + '66';
+        el.style.color = PID_COLORS[f.pid % PID_COLORS.length];
+        el.textContent = 'P'+(f.pid+1);
+      }
+      fg.appendChild(el);
+    }
+    tg.innerHTML = '';
+    for (let i = 0; i < 8; i++) {
+      const el = document.createElement('div');
+      el.className = 'mini-tlb-entry';
+      const t = miniTLB[i];
+      if (t) {
+        el.style.background = SEG_COLORS[t.seg] + '22';
+        el.style.borderColor = SEG_COLORS[t.seg] + '55';
+        el.style.color = SEG_COLORS[t.seg];
+        el.textContent = t.seg[0];
+      }
+      tg.appendChild(el);
+    }
+  }
+
+  function tickVirtual() {
+    const pfn = Math.floor(Math.random() * 16);
+    const pid = Math.floor(Math.random() * 8);
+    const seg = SEGS[Math.floor(Math.random()*4)];
+    if (Math.random() < 0.6) {
+      miniFrames[pfn] = {pid, seg};
+    } else {
+      miniFrames[pfn] = null;
+    }
+    const tlbIdx = Math.floor(Math.random() * 8);
+    miniTLB[tlbIdx] = Math.random() < 0.7 ? {pid, seg} : null;
+    renderMiniVM();
+  }
+
+  setInterval(tickContiguous, 1200);
+  setInterval(tickVirtual, 900);
+  tickContiguous(); tickVirtual();
+
+  // ── Clock ──
+  function updateClock() {
+    const el = document.getElementById('clockDisplay');
+    if (!el) return;
+    el.textContent = new Date().toLocaleTimeString('en-US', {hour12:false});
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+})();
+</script>
 </body>
 </html>
