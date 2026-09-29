@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MEMLAB — Virtual Memory & Paging Visualizer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07090f; --panel: #0f1420; --panel2: #141c2e; --line: #1a2236;
+    --text: #e2e8f0; --dim: #64748b; --faint: #334155;
+    --accent: #38bdf8; --accent-glow: rgba(56,189,248,0.12);
+    --green: #22c55e; --yellow: #eab308; --red: #ef4444; --purple: #a855f7; --orange: #f97316;
+    --seg-code: #3b82f6; --seg-data: #10b981; --seg-heap: #f59e0b; --seg-stack: #a855f7;
+    --pid-1: #f97316; --pid-2: #06b6d4; --pid-3: #8b5cf6; --pid-4: #10b981;
+    --pid-5: #ec4899; --pid-6: #eab308; --pid-7: #14b8a6; --pid-8: #a855f7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100vh; padding: 24px 32px 60px;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 16px;
+    border-bottom: 1px solid var(--line); padding-bottom: 16px; margin-bottom: 24px;
+  }
+  .back-btn {
+    text-decoration: none; color: var(--dim); font-size: 12px;
+    background: var(--panel2); border: 1px solid var(--line);
+    padding: 6px 12px; border-radius: 4px; transition: all 0.15s;
+  }
+  .back-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .title { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 20px; margin-top: 10px; }
+  .title span { color: var(--accent); }
+  .subtitle { color: var(--dim); font-size: 12px; margin-top: 4px; }
+  .metrics-bar { display: flex; gap: 12px; }
+  .metric-card { background: var(--panel); border: 1px solid var(--line); padding: 8px 16px; border-radius: 6px; text-align: center; }
+  .metric-val { font-family: 'Space Mono', monospace; font-size: 16px; font-weight: 700; color: var(--accent); }
+  .metric-label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .controls {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 24px; background: var(--panel);
+    padding: 12px 18px; border-radius: 6px; border: 1px solid var(--line);
+  }
+  button {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600;
+    padding: 8px 16px; border-radius: 4px; cursor: pointer; transition: all 0.15s;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+  button.primary { background: var(--accent); color: #07090f; border-color: var(--accent); }
+  button.primary:hover:not(:disabled) { background: #0284c7; color: #fff; }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .speed-ctrl { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); margin-left: auto; }
+  input[type=range] { accent-color: var(--accent); }
+
+  .main-grid { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; }
+  .left-col, .right-col { display: flex; flex-direction: column; gap: 20px; }
+
+  section.panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px 20px;
+  }
+  .panel h2 {
+    font-family: 'Space Mono', monospace; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--dim); margin-bottom: 14px; display: flex; justify-content: space-between;
+  }
+
+  /* Stats strip */
+  .stats-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat-box { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px; }
+  .stat-val { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; }
+  .stat-val.good { color: var(--green); }
+  .stat-val.bad { color: var(--red); }
+  .stat-val.info { color: var(--accent); }
+  .stat-val.warn { color: var(--yellow); }
+  .stat-label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+  /* Physical Frames */
+  .frames-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+  .frame-box {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 4px;
+    padding: 6px; min-height: 58px; display: flex; flex-direction: column;
+    justify-content: space-between; transition: all 0.25s ease;
+  }
+  .frame-box.occupied { border-color: rgba(255,255,255,0.1); }
+  .frame-box.flash-in { animation: frameIn 0.4s ease; }
+  .frame-box.flash-out { animation: frameOut 0.4s ease; }
+  @keyframes frameIn { 0% { transform: scale(0.9); opacity: 0.3; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes frameOut { 0% { opacity: 1; } 100% { opacity: 0.3; } }
+  .frame-num { font-size: 8px; color: var(--faint); }
+  .frame-pid { font-size: 11px; font-weight: 700; margin-top: 2px; }
+  .frame-seg {
+    font-size: 8px; text-transform: uppercase; font-weight: 700;
+    padding: 2px 4px; border-radius: 2px; width: fit-content; margin-top: 2px;
+  }
+  .seg-Code  { background: var(--seg-code); color: #fff; }
+  .seg-Data  { background: var(--seg-data); color: #000; }
+  .seg-Heap  { background: var(--seg-heap); color: #000; }
+  .seg-Stack { background: var(--seg-stack); color: #fff; }
+
+  /* TLB */
+  .tlb-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .tlb-slot {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 4px;
+    padding: 8px 10px; font-size: 11px; min-height: 52px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .tlb-slot .slot-id { font-size: 9px; color: var(--faint); margin-bottom: 4px; }
+  .tlb-slot.hit { border-color: var(--green); box-shadow: 0 0 10px rgba(34,197,94,0.25); }
+  .tlb-slot.miss { border-color: var(--red); box-shadow: 0 0 10px rgba(239,68,68,0.2); }
+
+  /* Segments */
+  .proc-seg-item { margin-bottom: 14px; }
+  .proc-seg-name { font-size: 11px; font-weight: 600; margin-bottom: 6px; }
+  .seg-bars { display: flex; gap: 4px; flex-wrap: wrap; }
+  .seg-bar {
+    height: 24px; display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; border-radius: 3px; padding: 0 6px; color: #fff;
+  }
+
+  /* Lanes */
+  .lanes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .lane {
+    background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 4px; padding: 10px; min-height: 100px;
+  }
+  .lane-title {
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 6px; color: var(--dim);
+  }
+  .lane-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .lane[data-state="READY"]      .lane-dot { background: var(--yellow); }
+  .lane[data-state="RUNNING"]    .lane-dot { background: var(--green); }
+  .lane[data-state="WAITING"]    .lane-dot { background: var(--red); }
+  .lane[data-state="TERMINATED"] .lane-dot { background: var(--faint); }
+  .chip {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 3px; padding: 5px 8px; margin-bottom: 5px; font-size: 11px;
+  }
+
+  /* Log */
+  .log {
+    font-size: 11px; line-height: 1.65; height: 200px; overflow-y: auto;
+    background: #050710; border: 1px solid var(--line); border-radius: 4px; padding: 10px;
+  }
+  .log-line { white-space: pre-wrap; font-family: 'IBM Plex Mono', monospace; }
+  .ev-fault  { color: var(--red); font-weight: 700; }
+  .ev-hit    { color: var(--green); }
+  .ev-miss   { color: var(--yellow); }
+  .ev-alloc  { color: var(--accent); }
+  .ev-evict  { color: var(--orange); font-weight: 700; }
+  .ev-sched  { color: var(--dim); }
+  .ev-term   { color: var(--faint); }
+  .tk { color: var(--faint); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <a class="back-btn" href="index.html">← Dashboard</a>
+    <div class="title">MEM<span>LAB</span> — Virtual Memory &amp; Page Table Visualizer</div>
+    <div class="subtitle">Segmented VM · Demand Paging · Hardware TLB · FIFO Replacement · Round-Robin Scheduler</div>
+  </div>
+  <div class="metrics-bar">
+    <div class="metric-card">
+      <div class="metric-val" id="tickNum">0</div>
+      <div class="metric-label">Clock Tick</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val" id="tlbHitRate">—</div>
+      <div class="metric-label">TLB Hit Rate</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val" id="pageFaultCount">0</div>
+      <div class="metric-label">Page Faults</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val" id="frameUsed">0/32</div>
+      <div class="metric-label">Frames Used</div>
+    </div>
+  </div>
+</header>
+
+<div class="controls">
+  <button id="stepBtn">Step &#9656;</button>
+  <button id="playBtn" class="primary">Play &#9654;</button>
+  <button id="resetBtn">Reset &#8634;</button>
+  <div class="speed-ctrl">
+    <span>Speed:</span>
+    <input type="range" id="speed" min="1" max="10" value="5">
+  </div>
+</div>
+
+<div class="stats-strip">
+  <div class="stat-box"><div class="stat-val good" id="sTLBhit">0</div><div class="stat-label">TLB Hits</div></div>
+  <div class="stat-box"><div class="stat-val warn" id="sTLBmiss">0</div><div class="stat-label">TLB Misses</div></div>
+  <div class="stat-box"><div class="stat-val bad"  id="sFaults">0</div><div class="stat-label">Page Faults</div></div>
+  <div class="stat-box"><div class="stat-val info" id="sEvictions">0</div><div class="stat-label">Evictions</div></div>
+</div>
+
+<div class="main-grid">
+  <div class="left-col">
+    <section class="panel">
+      <h2>Physical RAM — 32 Frames × 4 KB = 128 KB</h2>
+      <div class="frames-grid" id="framesGrid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Process State Lanes</h2>
+      <div class="lanes">
+        <div class="lane" data-state="READY"><div class="lane-title"><span class="lane-dot"></span>Ready</div><div id="lane-READY"></div></div>
+        <div class="lane" data-state="RUNNING"><div class="lane-title"><span class="lane-dot"></span>Running</div><div id="lane-RUNNING"></div></div>
+        <div class="lane" data-state="WAITING"><div class="lane-title"><span class="lane-dot"></span>Fault / I/O</div><div id="lane-WAITING"></div></div>
+        <div class="lane" data-state="TERMINATED"><div class="lane-title"><span class="lane-dot"></span>Terminated</div><div id="lane-TERMINATED"></div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Memory Access &amp; Kernel Event Log</h2>
+      <div class="log" id="log"></div>
+    </section>
+  </div>
+
+  <div class="right-col">
+    <section class="panel">
+      <h2>Hardware TLB Cache (8 Entries)</h2>
+      <div class="tlb-grid" id="tlbGrid"></div>
+    </section>
+
+    <section class="panel" style="flex:1">
+      <h2>Virtual Address Space — Active Process Segments</h2>
+      <div id="segmentsView" style="overflow-y:auto; max-height:340px"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  const NUM_FRAMES = 32, TLB_SIZE = 8;
+  const PID_COLORS = ['#f97316','#06b6d4','#8b5cf6','#10b981','#ec4899','#eab308','#14b8a6','#a855f7'];
+  const pidColor = pid => PID_COLORS[(pid-1) % PID_COLORS.length];
+
+  let events = [], idx = 0, playing = false, timer = null;
+  let frames = Array(NUM_FRAMES).fill(null);
+  let tlb = Array(TLB_SIZE).fill(null);
+  let tlbPtr = 0;
+  let processes = new Map();
+  let tlbHits = 0, tlbMisses = 0, pageFaults = 0, evictions = 0;
+
+  const el = id => document.getElementById(id);
+
+  function initUI() {
+    const fg = el('framesGrid');
+    fg.innerHTML = '';
+    for (let i = 0; i < NUM_FRAMES; i++) {
+      fg.innerHTML += `<div class="frame-box" id="frame-${i}">
+        <div class="frame-num">PFN ${i}</div>
+        <div class="frame-pid" id="fp-${i}" style="color:var(--dim)">FREE</div>
+        <div id="fs-${i}"></div>
+      </div>`;
+    }
+    const tg = el('tlbGrid');
+    tg.innerHTML = '';
+    for (let i = 0; i < TLB_SIZE; i++) {
+      tg.innerHTML += `<div class="tlb-slot" id="tlb-${i}">
+        <div class="slot-id">SLOT ${i}</div>
+        <div id="tv-${i}" style="color:var(--dim)">EMPTY</div>
+      </div>`;
+    }
+  }
+
+  function reset() {
+    idx = 0;
+    frames = Array(NUM_FRAMES).fill(null);
+    tlb = Array(TLB_SIZE).fill(null);
+    tlbPtr = 0;
+    processes = new Map();
+    tlbHits = 0; tlbMisses = 0; pageFaults = 0; evictions = 0;
+    el('log').innerHTML = '';
+    el('tickNum').textContent = '0';
+    el('tlbHitRate').textContent = '—';
+    el('pageFaultCount').textContent = '0';
+    el('frameUsed').textContent = '0/32';
+    ['sTLBhit','sTLBmiss','sFaults','sEvictions'].forEach(id => el(id).textContent = '0');
+    initUI();
+    renderSegments();
+    renderLanes();
+  }
+
+  function updateMetrics() {
+    const total = tlbHits + tlbMisses;
+    el('tlbHitRate').textContent = total ? Math.round((tlbHits/total)*100) + '%' : '—';
+    el('pageFaultCount').textContent = pageFaults;
+    el('frameUsed').textContent = frames.filter(f=>f!==null).length + '/32';
+    el('sTLBhit').textContent = tlbHits;
+    el('sTLBmiss').textContent = tlbMisses;
+    el('sFaults').textContent = pageFaults;
+    el('sEvictions').textContent = evictions;
+  }
+
+  function renderFrame(pfn) {
+    const f = frames[pfn];
+    const box = el(`frame-${pfn}`);
+    const pidEl = el(`fp-${pfn}`);
+    const segEl = el(`fs-${pfn}`);
+    if (f) {
+      box.className = 'frame-box occupied';
+      pidEl.textContent = `P${f.pid}  V:${f.vpn}`;
+      pidEl.style.color = pidColor(f.pid);
+      segEl.className = `frame-seg seg-${f.segment}`;
+      segEl.textContent = f.segment;
+    } else {
+      box.className = 'frame-box';
+      pidEl.textContent = 'FREE';
+      pidEl.style.color = 'var(--dim)';
+      segEl.className = '';
+      segEl.textContent = '';
+    }
+  }
+
+  function renderTLB(slotIdx, type) {
+    const entry = tlb[slotIdx];
+    const valEl = el(`tv-${slotIdx}`);
+    const slotEl = el(`tlb-${slotIdx}`);
+    if (entry) {
+      valEl.innerHTML = `<span style="color:${pidColor(entry.pid)};font-weight:bold">P${entry.pid}</span> V:${entry.vpn} → <b style="color:var(--accent)">PFN:${entry.pfn}</b><br><span class="frame-seg seg-${entry.segment}" style="display:inline-block;margin-top:2px">${entry.segment}</span>`;
+    } else {
+      valEl.innerHTML = '<span style="color:var(--dim)">EMPTY</span>';
+    }
+    if (type) {
+      slotEl.className = 'tlb-slot ' + type;
+      setTimeout(() => slotEl.className = 'tlb-slot', 700);
+    }
+  }
+
+  function renderSegments() {
+    const sv = el('segmentsView');
+    sv.innerHTML = '';
+    const segColors = {Code:'var(--seg-code)', Data:'var(--seg-data)', Heap:'var(--seg-heap)', Stack:'var(--seg-stack)'};
+    for (const [pid, p] of processes) {
+      if (p.state === 'TERMINATED' || !p.segments || p.segments.length === 0) continue;
+      const div = document.createElement('div');
+      div.className = 'proc-seg-item';
+      div.innerHTML = `<div class="proc-seg-name" style="color:${pidColor(pid)}">P${pid} — ${p.name}</div>
+        <div class="seg-bars">` +
+        p.segments.map(s => `<div class="seg-bar" style="background:${segColors[s.name]||'#666'};width:${s.num_pages*18}px;color:${s.name==='Data'||s.name==='Heap'?'#000':'#fff'}">${s.name} ${s.base_vpn}..${s.base_vpn+s.num_pages-1}</div>`).join('') +
+        `</div>`;
+      sv.appendChild(div);
+    }
+  }
+
+  function renderLanes() {
+    ['READY','RUNNING','WAITING','TERMINATED'].forEach(st => {
+      const lane = el('lane-' + st);
+      lane.innerHTML = '';
+      for (const [pid, p] of processes) {
+        if (p.state === st) {
+          const chip = document.createElement('div');
+          chip.className = 'chip';
+          chip.style.borderLeftColor = pidColor(pid);
+          chip.innerHTML = `<b style="color:${pidColor(pid)}">P${pid}</b> ${p.name}`;
+          lane.appendChild(chip);
+        }
+      }
+    });
+  }
+
+  function appendLog(e) {
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    const evCls = {
+      tlb_hit: 'ev-hit', tlb_miss: 'ev-miss', page_fault: 'ev-fault',
+      page_allocated: 'ev-alloc', page_evicted: 'ev-evict',
+      process_scheduled: 'ev-sched', cpu_run: 'ev-sched', process_terminated: 'ev-term'
+    }[e.type] || '';
+    const detail =
+      e.type === 'tlb_hit'       ? ` seg=${e.segment} vpn=${e.vpn} → pfn=${e.pfn}` :
+      e.type === 'tlb_miss'      ? ` seg=${e.segment||''} vpn=${e.vpn}` :
+      e.type === 'page_fault'    ? ` seg=${e.segment} vpn=${e.vpn}` :
+      e.type === 'page_allocated'? ` seg=${e.segment} vpn=${e.vpn} → pfn=${e.pfn}` :
+      e.type === 'page_evicted'  ? ` pfn=${e.pfn} (was P${e.evicted_pid})` :
+      e.type === 'page_freed'    ? ` pfn=${e.pfn}` : '';
+    line.innerHTML = `<span class="tk">[t=${String(e.tick).padStart(3,' ')}]</span> <span class="${evCls}">${e.type.padEnd(16,' ')}</span> pid=${e.pid}${detail}`;
+    el('log').appendChild(line);
+    el('log').scrollTop = el('log').scrollHeight;
+  }
+
+  function applyEvent(e) {
+    el('tickNum').textContent = e.tick;
+    let p, slotIdx;
+    switch (e.type) {
+      case 'process_created':
+        processes.set(e.pid, {pid:e.pid, name:e.name, state:'NEW', segments:[]});
+        break;
+      case 'segment_created':
+        p = processes.get(e.pid);
+        if (p) p.segments.push({name:e.segment, base_vpn:e.base_vpn, num_pages:e.num_pages});
+        renderSegments(); break;
+      case 'process_ready':
+        p = processes.get(e.pid); if (p) p.state = 'READY'; break;
+      case 'process_scheduled':
+      case 'cpu_run':
+        p = processes.get(e.pid); if (p) p.state = 'RUNNING'; break;
+      case 'io_requested':
+        p = processes.get(e.pid); if (p) p.state = 'WAITING'; break;
+      case 'tlb_hit':
+        tlbHits++;
+        // Flash the matching TLB slot
+        slotIdx = tlb.findIndex(s => s && s.pid === e.pid && s.vpn === e.vpn);
+        if (slotIdx !== -1) renderTLB(slotIdx, 'hit');
+        break;
+      case 'tlb_miss':
+        tlbMisses++;
+        break;
+      case 'page_fault':
+        pageFaults++;
+        p = processes.get(e.pid); if (p) p.state = 'WAITING';
+        break;
+      case 'page_allocated': {
+        const pfn = e.pfn;
+        frames[pfn] = {pid:e.pid, vpn:e.vpn, segment:e.segment};
+        // Add to TLB (FIFO)
+        tlb[tlbPtr] = {pid:e.pid, vpn:e.vpn, pfn, segment:e.segment};
+        renderTLB(tlbPtr, null);
+        tlbPtr = (tlbPtr + 1) % TLB_SIZE;
+        const box = el(`frame-${pfn}`);
+        if (box) { box.classList.add('flash-in'); setTimeout(() => box.classList.remove('flash-in'), 400); }
+        renderFrame(pfn);
+        break;
+      }
+      case 'page_evicted': {
+        const pfn = e.pfn;
+        frames[pfn] = null;
+        evictions++;
+        // Invalidate TLB
+        for (let i = 0; i < TLB_SIZE; i++) {
+          if (tlb[i] && tlb[i].pfn === pfn) { tlb[i] = null; renderTLB(i, null); }
+        }
+        const box = el(`frame-${pfn}`);
+        if (box) { box.classList.add('flash-out'); setTimeout(() => box.classList.remove('flash-out'), 400); }
+        renderFrame(pfn);
+        break;
+      }
+      case 'page_freed': {
+        const pfn = e.pfn;
+        frames[pfn] = null;
+        renderFrame(pfn);
+        break;
+      }
+      case 'process_terminated':
+        p = processes.get(e.pid); if (p) p.state = 'TERMINATED';
+        // Invalidate TLB entries for this pid
+        for (let i = 0; i < TLB_SIZE; i++) {
+          if (tlb[i] && tlb[i].pid === e.pid) { tlb[i] = null; renderTLB(i, null); }
+        }
+        renderSegments();
+        break;
+    }
+    appendLog(e);
+    updateMetrics();
+    renderLanes();
+  }
+
+  function step() { if (idx < events.length) applyEvent(events[idx++]); else stop(); }
+  function play() {
+    if (playing) return; playing = true;
+    el('playBtn').textContent = 'Pause ❚❚';
+    timer = setInterval(step, 1100 - el('speed').value * 100);
+  }
+  function stop() {
+    playing = false; el('playBtn').textContent = 'Play ►';
+    if (timer) clearInterval(timer);
+  }
+
+  el('stepBtn').addEventListener('click', step);
+  el('playBtn').addEventListener('click', () => playing ? stop() : play());
+  el('resetBtn').addEventListener('click', reset);
+
+  fetch('events.json').then(r => r.json()).then(data => {
+    events = data; reset();
+    el('stepBtn').disabled = false;
+    el('playBtn').disabled = false;
+    el('resetBtn').disabled = false;
+  }).catch(() => console.log('events.json not found'));
+})();
+</script>
+</body>
+</html>
