@@ -1,31 +1,86 @@
-﻿/**
+/**
  * visualizer_demo.cpp
  *
- * Runs the memlab scheduler and the old BuddyAllocator together to produce
+ * Runs the memlab scheduler and a simple mock allocator together to produce
  * events.json for the frontend visualizer.
+ * 
+ * Note: Uses a self-contained First-Fit allocator to avoid dependencies on
+ * older C++14/17 code in the root directory that may fail to compile on GCC 6.3.
  */
 
 #include "memlab/sched/process.hpp"
 #include "memlab/sched/policies/rr.hpp"
 #include "memlab/sim/trace_writer.hpp"
-#include "../../include/BuddyAllocator.hpp"
 
 #include <iostream>
 #include <random>
 #include <vector>
 #include <map>
+#include <algorithm>
 
 using namespace memlab;
 
+// A simple First-Fit allocator for the visualization demo
+struct Block {
+    size_t offset;
+    size_t size;
+    bool free;
+};
+
+class SimpleAllocator {
+    std::vector<Block> blocks;
+public:
+    SimpleAllocator(size_t total) {
+        blocks.push_back({0, total, true});
+    }
+    
+    void* Allocate(size_t size) {
+        for (size_t i = 0; i < blocks.size(); ++i) {
+            if (blocks[i].free && blocks[i].size >= size) {
+                if (blocks[i].size > size) {
+                    Block remaining = {blocks[i].offset + size, blocks[i].size - size, true};
+                    blocks[i].size = size;
+                    blocks[i].free = false;
+                    blocks.insert(blocks.begin() + i + 1, remaining);
+                } else {
+                    blocks[i].free = false;
+                }
+                return reinterpret_cast<void*>(blocks[i].offset + 1); // +1 so it's non-null
+            }
+        }
+        return nullptr;
+    }
+    
+    void Free(void* ptr) {
+        if (!ptr) return;
+        size_t offset = reinterpret_cast<size_t>(ptr) - 1;
+        for (auto& b : blocks) {
+            if (b.offset == offset) {
+                b.free = true;
+                break;
+            }
+        }
+        // Coalesce free blocks
+        for (size_t i = 0; i + 1 < blocks.size(); ) {
+            if (blocks[i].free && blocks[i+1].free) {
+                blocks[i].size += blocks[i+1].size;
+                blocks.erase(blocks.begin() + i + 1);
+            } else {
+                ++i;
+            }
+        }
+    }
+};
+
+
 int main() {
     constexpr size_t TOTAL_MEMORY = 8192;
-    constexpr size_t MIN_BLOCK    = 64;
 
-    OS::Memory::BuddyAllocator allocator(TOTAL_MEMORY, MIN_BLOCK);
+    SimpleAllocator allocator(TOTAL_MEMORY);
     TraceWriter trace("frontend/events.json"); // output to frontend dir
     
     // Using memlab's Round Robin scheduler
-    RoundRobin sched(3);
+    RoundRobin sched(4); // quantum = 4
 
     std::mt19937 rng(42);
     std::uniform_int_distribution<int> arrivalDist(0, 6);
@@ -64,7 +119,8 @@ int main() {
     std::vector<Process*> memory_waiting; // pending admission
     std::map<int, void*> allocations;     // pid -> pointer
 
-    auto enqueue = [&](Process* p, bool preempted = false) {
+    // Create a local lambda object we can pass around
+    auto do_enqueue = [&](Process* p, bool preempted) {
         p->state = State::Ready;
         sched.add(p);
         if (preempted) {
@@ -78,12 +134,12 @@ int main() {
         void* ptr = allocator.Allocate(p->mem_bytes);
         if (ptr) {
             allocations[p->pid] = ptr;
-            size_t offset = reinterpret_cast<uintptr_t>(ptr);
+            size_t offset = reinterpret_cast<size_t>(ptr) - 1;
             trace.log(tick, "memory_allocated", p->pid, {
                 {"offset", TraceWriter::num(offset)},
                 {"size", TraceWriter::num(p->mem_bytes)}
             });
-            enqueue(p);
+            do_enqueue(p, false);
             return true;
         }
         return false; // admission delayed due to memory
@@ -117,11 +173,11 @@ int main() {
                 it = io_waiting.erase(it);
                 if (p->advance_burst()) {
                     p->burst_remaining = p->current_burst()->ticks;
-                    enqueue(p);
+                    do_enqueue(p, false);
                 } else {
                     allocator.Free(allocations[p->pid]);
                     trace.log(tick, "memory_freed", p->pid, {
-                        {"offset", TraceWriter::num(reinterpret_cast<uintptr_t>(allocations[p->pid]))},
+                        {"offset", TraceWriter::num(reinterpret_cast<size_t>(allocations[p->pid]) - 1)},
                         {"size", TraceWriter::num(p->mem_bytes)}
                     });
                     trace.log(tick, "process_terminated", p->pid);
@@ -143,7 +199,7 @@ int main() {
 
         // 4. Preemption
         if (running && sched.should_preempt(running, ran_ticks)) {
-            enqueue(running, true);
+            do_enqueue(running, true);
             running = nullptr;
             ran_ticks = 0;
         }
@@ -172,7 +228,6 @@ int main() {
             ++ran_ticks;
 
             if (running->burst_remaining == 0) {
-                Burst* b = running->current_burst();
                 if (running->advance_burst()) {
                     Burst* nb = running->current_burst();
                     running->burst_remaining = nb->ticks;
@@ -188,7 +243,7 @@ int main() {
                 } else {
                     allocator.Free(allocations[running->pid]);
                     trace.log(tick + 1, "memory_freed", running->pid, {
-                        {"offset", TraceWriter::num(reinterpret_cast<uintptr_t>(allocations[running->pid]))},
+                        {"offset", TraceWriter::num(reinterpret_cast<size_t>(allocations[running->pid]) - 1)},
                         {"size", TraceWriter::num(running->mem_bytes)}
                     });
                     trace.log(tick + 1, "process_terminated", running->pid);
@@ -202,6 +257,6 @@ int main() {
         ++tick;
     }
 
-    std::cout << "Wrote trace to frontend/events.json" << std::endl;
+    std::cout << "Wrote NEW trace to frontend/events.json" << std::endl;
     return 0;
 }

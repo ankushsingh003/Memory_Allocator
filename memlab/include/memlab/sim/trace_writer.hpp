@@ -25,8 +25,8 @@ public:
              << "\"type\":\"" << type << "\","
              << "\"pid\":" << pid;
 
-        for (const auto& [k, v] : fields) {
-            _out << ",\"" << k << "\":" << v;
+        for (const auto& kv : fields) {
+            _out << ",\"" << kv.first << "\":" << kv.second;
         }
         _out << "}";
     }
